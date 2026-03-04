@@ -237,3 +237,18 @@ html, body {
 #outline-tree::-webkit-scrollbar-thumb:hover {
   background: #6a6d70;
 }
+
+#back-btn {
+  background: #4a4d50;
+  border: 1px solid #5a5d60;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+#back-btn:hover {
+  background: #5a5d60;
+}

@@ -1,14 +1,25 @@
 import { PdfViewer } from './viewer.js'
 import { ViewerControls } from './controls.js'
 
-const PDF_ID = 'test-bookmark'
+function getPdfIdFromUrl() {
+  const match = window.location.pathname.match(/^\/view\/([a-f0-9]{32})$/)
+  return match ? match[1] : null
+}
 
 async function main() {
+  const pdfId = getPdfIdFromUrl()
+  
+  if (!pdfId) {
+    document.getElementById('page-indicator').textContent = 'Invalid PDF ID'
+    return
+  }
+
   const viewer = new PdfViewer('page-container', 'viewport')
   const controls = new ViewerControls(viewer)
 
   try {
-    const info = await viewer.load(PDF_ID)
+    const info = await viewer.load(pdfId)
+    document.title = `${info.filename || 'PDF Viewer'}`
     console.log(`Loaded PDF: ${info.pageCount} pages`)
 
     controls.init()
