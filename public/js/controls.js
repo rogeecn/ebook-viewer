@@ -33,6 +33,7 @@ export class ViewerControls {
       animate: true,
       duration: 200,
       disablePan: true,
+      noBind: true,
     })
 
     this.viewport.addEventListener('wheel', (e) => {
