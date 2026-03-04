@@ -1,6 +1,10 @@
 const DEFAULT_SCALE = 1.5
 const DISPLAY_WIDTH = 800
 
+function getScaleForQualityTier(tier) {
+  return DEFAULT_SCALE * tier
+}
+
 export class PdfViewer {
   constructor(containerId, viewportId) {
     this.container = document.getElementById(containerId)
@@ -8,6 +12,7 @@ export class PdfViewer {
     this.pdfId = null
     this.pdfInfo = null
     this.serverScale = DEFAULT_SCALE
+    this.qualityTier = 1
     this.renderedPages = new Set()
     this.observer = null
   }
@@ -51,12 +56,13 @@ export class PdfViewer {
     return wrapper
   }
 
-  setupCanvas(canvas, width, height) {
+  setupCanvas(canvas, width, height, qualityMultiplier = 1) {
     const dpr = window.devicePixelRatio || 1
+    const scale = dpr * qualityMultiplier
     canvas.style.width = `${width}px`
     canvas.style.height = `${height}px`
-    canvas.width = Math.round(width * dpr)
-    canvas.height = Math.round(height * dpr)
+    canvas.width = Math.round(width * scale)
+    canvas.height = Math.round(height * scale)
   }
 
   setupIntersectionObserver() {
@@ -86,10 +92,15 @@ export class PdfViewer {
     })
   }
 
-  async renderPage(wrapper, pageNum) {
+  async renderPage(wrapper, pageNum, qualityMultiplier = 1) {
     this.renderedPages.add(pageNum)
     const canvas = wrapper.querySelector('canvas')
     const ctx = canvas.getContext('2d')
+
+    const displayWidth = parseInt(wrapper.style.width, 10)
+    const displayHeight = parseInt(wrapper.style.height, 10)
+
+    this.setupCanvas(canvas, displayWidth, displayHeight, qualityMultiplier)
 
     try {
       const url = `/api/pdf/${this.pdfId}/page/${pageNum}?scale=${this.serverScale}`
@@ -109,10 +120,15 @@ export class PdfViewer {
     }
   }
 
-  reRenderAll(newScale) {
-    this.serverScale = newScale
+  reRenderAll(qualityTier) {
+    this.qualityTier = qualityTier
+    this.serverScale = getScaleForQualityTier(qualityTier)
     this.renderedPages.clear()
-    this.setupIntersectionObserver()
+    
+    this.container.querySelectorAll('.page-wrapper').forEach((wrapper) => {
+      const pageNum = parseInt(wrapper.dataset.page, 10)
+      this.renderPage(wrapper, pageNum, qualityTier)
+    })
   }
 
   getCurrentPage() {

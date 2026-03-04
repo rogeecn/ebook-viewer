@@ -5,6 +5,7 @@ export class ViewerControls {
     this.viewer = viewer
     this.panzoom = null
     this.currentZoom = 1.0
+    this.currentQualityTier = 1
 
     this.viewport = document.getElementById('viewport')
     this.container = document.getElementById('page-container')
@@ -15,6 +16,14 @@ export class ViewerControls {
     this.resetBtn = document.getElementById('reset')
     this.zoomLevel = document.getElementById('zoom-level')
     this.pageIndicator = document.getElementById('page-indicator')
+  }
+
+  getQualityTier(zoom) {
+    if (zoom <= 1.0) return 1
+    if (zoom <= 1.5) return 1.5
+    if (zoom <= 2.0) return 2
+    if (zoom <= 3.0) return 3
+    return 4
   }
 
   init() {
@@ -88,8 +97,16 @@ export class ViewerControls {
   }
 
   onZoomChange() {
-    this.currentZoom = this.panzoom.getScale()
+    const newZoom = this.panzoom.getScale()
+    const newTier = this.getQualityTier(newZoom)
+    
+    this.currentZoom = newZoom
     this.updateZoomDisplay()
+    
+    if (newTier !== this.currentQualityTier) {
+      this.currentQualityTier = newTier
+      this.viewer.reRenderAll(newTier)
+    }
   }
 
   updateZoomDisplay() {
