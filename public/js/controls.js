@@ -24,6 +24,11 @@ export class ViewerControls {
     this.swipeStartX = 0
     this.swipeStartY = 0
     this.swipeStartTime = 0
+
+    this.isAutoScrolling = false
+    this.autoScrollSpeedPps = 30
+    this.autoScrollRafId = null
+    this.autoScrollLastTs = null
   }
 
   getQualityTier(zoom) {
@@ -42,7 +47,10 @@ export class ViewerControls {
     this.bindKeyboardEvents()
     this.bindSwipeEvents()
     this.bindViewerEvents()
+    this.bindAutoScrollEvents()
     this.updateZoomDisplay()
+    this.updateAutoScrollButton()
+    this.updateAutoScrollSpeedDisplay()
   }
 
   setupPanzoom() {
@@ -110,13 +118,19 @@ export class ViewerControls {
     })
   }
 
-  bindModeEvents() {
+bindModeEvents() {
     this.toggleModeBtn.addEventListener('click', () => {
       const newMode = this.viewer.displayMode === 'vertical' ? 'horizontal' : 'vertical'
+      
+      if (this.isAutoScrolling && newMode === 'horizontal') {
+        this.stopAutoScroll()
+      }
+      
       this.viewer.setDisplayMode(newMode)
       this.updateModeButton()
       this.updatePanzoomForMode(newMode)
       this.updatePageIndicator()
+      this.updateAutoScrollButton()
     })
   }
 
@@ -229,6 +243,119 @@ export class ViewerControls {
     const currentPage = this.viewer.getCurrentPage()
     const totalPages = this.viewer.pageCount
     this.pageIndicator.textContent = `${currentPage} / ${totalPages}`
+  }
+
+  canAutoScroll() {
+    return this.viewer.displayMode === 'vertical'
+  }
+
+  startAutoScroll() {
+    if (this.isAutoScrolling) return
+    if (!this.canAutoScroll()) return
+
+    this.isAutoScrolling = true
+    this.autoScrollLastTs = null
+    this.autoScrollRafId = requestAnimationFrame((ts) => this.autoScrollTick(ts))
+    this.updateAutoScrollButton()
+  }
+
+  stopAutoScroll() {
+    if (!this.isAutoScrolling) return
+
+    this.isAutoScrolling = false
+    if (this.autoScrollRafId !== null) {
+      cancelAnimationFrame(this.autoScrollRafId)
+      this.autoScrollRafId = null
+    }
+    this.autoScrollLastTs = null
+    this.updateAutoScrollButton()
+  }
+
+  toggleAutoScroll() {
+    if (this.isAutoScrolling) {
+      this.stopAutoScroll()
+    } else {
+      this.startAutoScroll()
+    }
+  }
+
+  setAutoScrollSpeed(pps) {
+    this.autoScrollSpeedPps = Math.max(10, Math.min(50, pps))
+    this.updateAutoScrollSpeedDisplay()
+  }
+
+  autoScrollTick(timestamp) {
+    if (!this.isAutoScrolling) return
+    if (!this.canAutoScroll()) {
+      this.stopAutoScroll()
+      return
+    }
+
+    if (this.autoScrollLastTs === null) {
+      this.autoScrollLastTs = timestamp
+    }
+
+    const dt = (timestamp - this.autoScrollLastTs) / 1000
+    this.autoScrollLastTs = timestamp
+
+    const deltaPx = this.autoScrollSpeedPps * dt
+    const newScrollTop = this.viewport.scrollTop + deltaPx
+    const maxScrollTop = this.viewport.scrollHeight - this.viewport.clientHeight
+
+    if (newScrollTop >= maxScrollTop - 1) {
+      this.viewport.scrollTop = maxScrollTop
+      this.stopAutoScroll()
+      return
+    }
+
+    this.viewport.scrollTop = newScrollTop
+    this.autoScrollRafId = requestAnimationFrame((ts) => this.autoScrollTick(ts))
+  }
+
+  updateAutoScrollButton() {
+    const btn = document.getElementById('toggle-autoscroll')
+    if (!btn) return
+
+    btn.textContent = this.isAutoScrolling ? '⏸' : '▶'
+    btn.setAttribute('aria-pressed', this.isAutoScrolling.toString())
+    btn.disabled = !this.canAutoScroll()
+  }
+
+  updateAutoScrollSpeedDisplay() {
+    const display = document.getElementById('autoscroll-speed-value')
+    if (display) {
+      display.textContent = `${Math.round(this.autoScrollSpeedPps)}`
+    }
+  }
+
+  bindAutoScrollEvents() {
+    const toggleBtn = document.getElementById('toggle-autoscroll')
+    const speedInput = document.getElementById('autoscroll-speed')
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', () => this.toggleAutoScroll())
+    }
+
+    if (speedInput) {
+speedInput.value = this.autoScrollSpeedPps
+      speedInput.addEventListener('input', (e) => {
+        this.setAutoScrollSpeed(parseFloat(e.target.value) || 30)
+      })
+    }
+
+    this.viewport.addEventListener('wheel', () => {
+      if (this.isAutoScrolling) this.stopAutoScroll()
+    }, { passive: true })
+
+    this.viewport.addEventListener('pointerdown', () => {
+      if (this.isAutoScrolling) this.stopAutoScroll()
+    })
+
+    this.viewport.addEventListener('keydown', (e) => {
+      if (this.isAutoScrolling && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key)) {
+        this.stopAutoScroll()
+      }
+    })
   }
 
   destroy() {
