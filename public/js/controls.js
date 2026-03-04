@@ -1,5 +1,8 @@
 import Panzoom from '/js/vendor/panzoom.es.js'
 
+const SWIPE_MIN_PX = 40
+const SWIPE_MAX_MS = 600
+
 export class ViewerControls {
   constructor(viewer) {
     this.viewer = viewer
@@ -16,6 +19,11 @@ export class ViewerControls {
     this.resetBtn = document.getElementById('reset')
     this.zoomLevel = document.getElementById('zoom-level')
     this.pageIndicator = document.getElementById('page-indicator')
+    this.toggleModeBtn = document.getElementById('toggle-mode')
+
+    this.swipeStartX = 0
+    this.swipeStartY = 0
+    this.swipeStartTime = 0
   }
 
   getQualityTier(zoom) {
@@ -30,6 +38,10 @@ export class ViewerControls {
     this.setupPanzoom()
     this.bindToolbarEvents()
     this.bindScrollEvents()
+    this.bindModeEvents()
+    this.bindKeyboardEvents()
+    this.bindSwipeEvents()
+    this.bindViewerEvents()
     this.updateZoomDisplay()
   }
 
@@ -92,8 +104,107 @@ export class ViewerControls {
 
   bindScrollEvents() {
     this.viewport.addEventListener('scroll', () => {
+      if (this.viewer.displayMode === 'vertical') {
+        this.updatePageIndicator()
+      }
+    })
+  }
+
+  bindModeEvents() {
+    this.toggleModeBtn.addEventListener('click', () => {
+      const newMode = this.viewer.displayMode === 'vertical' ? 'horizontal' : 'vertical'
+      this.viewer.setDisplayMode(newMode)
+      this.updateModeButton()
+      this.updatePanzoomForMode(newMode)
       this.updatePageIndicator()
     })
+  }
+
+  bindKeyboardEvents() {
+    window.addEventListener('keydown', (e) => {
+      if (this.viewer.displayMode !== 'horizontal') return
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        this.viewer.goToPage(this.viewer.currentPage - 1)
+        this.updatePageIndicator()
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        this.viewer.goToPage(this.viewer.currentPage + 1)
+        this.updatePageIndicator()
+      }
+    })
+  }
+
+  bindSwipeEvents() {
+    this.viewport.addEventListener('pointerdown', (e) => {
+      if (this.viewer.displayMode !== 'horizontal') return
+
+      this.swipeStartX = e.clientX
+      this.swipeStartY = e.clientY
+      this.swipeStartTime = Date.now()
+      this.viewport.setPointerCapture(e.pointerId)
+    })
+
+    this.viewport.addEventListener('pointerup', (e) => {
+      if (this.viewer.displayMode !== 'horizontal') return
+      if (this.swipeStartTime === 0) return
+
+      const dx = e.clientX - this.swipeStartX
+      const dy = e.clientY - this.swipeStartY
+      const dt = Date.now() - this.swipeStartTime
+
+      this.swipeStartTime = 0
+
+      if (dt > SWIPE_MAX_MS) return
+      if (Math.abs(dy) > Math.abs(dx)) return
+      if (Math.abs(dx) < SWIPE_MIN_PX) return
+
+      if (dx < 0) {
+        this.viewer.goToPage(this.viewer.currentPage + 1)
+      } else {
+        this.viewer.goToPage(this.viewer.currentPage - 1)
+      }
+      this.updatePageIndicator()
+    })
+
+    this.viewport.addEventListener('pointercancel', () => {
+      this.swipeStartTime = 0
+    })
+  }
+
+  bindViewerEvents() {
+    this.container.addEventListener('viewer:resetZoom', () => {
+      this.panzoom.reset({ animate: true })
+      this.onZoomChange()
+    })
+
+    this.container.addEventListener('viewer:pageChange', () => {
+      this.updatePageIndicator()
+    })
+  }
+
+  updateModeButton() {
+    const isHorizontal = this.viewer.displayMode === 'horizontal'
+    this.toggleModeBtn.textContent = isHorizontal ? 'Scroll' : 'Paged'
+    this.toggleModeBtn.setAttribute('aria-pressed', isHorizontal.toString())
+  }
+
+  updatePanzoomForMode(mode) {
+    if (mode === 'horizontal') {
+      this.panzoom.setOptions({
+        disablePan: true,
+        touchAction: 'none',
+      })
+      this.panzoom.reset({ animate: false })
+      this.onZoomChange()
+    } else {
+      this.panzoom.setOptions({
+        disablePan: false,
+        panOnlyWhenZoomed: true,
+        touchAction: 'auto',
+      })
+    }
   }
 
   onZoomChange() {

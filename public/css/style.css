@@ -69,6 +69,12 @@ html, body {
   flex: 1;
   overflow: auto;
   position: relative;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+#viewport::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 #page-container {
@@ -100,4 +106,21 @@ html, body {
   transform: translate(-50%, -50%);
   color: #999;
   font-size: 14px;
+}
+
+/* Horizontal paged mode */
+.mode-horizontal #viewport {
+  overflow: hidden;
+}
+
+.mode-horizontal #page-container {
+  height: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-wrapper.is-hidden {
+  display: none;
 }

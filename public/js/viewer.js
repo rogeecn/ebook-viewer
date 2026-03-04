@@ -15,6 +15,8 @@ export class PdfViewer {
     this.qualityTier = 1
     this.renderedPages = new Set()
     this.observer = null
+    this.displayMode = 'vertical'
+    this.currentPage = 1
   }
 
   async load(pdfId) {
@@ -132,6 +134,10 @@ export class PdfViewer {
   }
 
   getCurrentPage() {
+    if (this.displayMode === 'horizontal') {
+      return this.currentPage
+    }
+
     const wrappers = this.container.querySelectorAll('.page-wrapper')
     const viewportRect = this.viewport.getBoundingClientRect()
     const viewportCenter = viewportRect.top + viewportRect.height / 2
@@ -150,6 +156,72 @@ export class PdfViewer {
     })
 
     return closestPage
+  }
+
+  setDisplayMode(mode, { preservePage = true } = {}) {
+    const targetPage = preservePage ? this.getCurrentPage() : 1
+    this.displayMode = mode
+
+    const app = document.getElementById('app')
+    const wrappers = this.container.querySelectorAll('.page-wrapper')
+
+    if (mode === 'horizontal') {
+      app.classList.add('mode-horizontal')
+      wrappers.forEach((wrapper) => {
+        const pageNum = parseInt(wrapper.dataset.page, 10)
+        if (pageNum === targetPage) {
+          wrapper.classList.remove('is-hidden')
+        } else {
+          wrapper.classList.add('is-hidden')
+        }
+      })
+      this.currentPage = targetPage
+      this.ensurePageRendered(targetPage)
+      this.viewport.scrollTop = 0
+    } else {
+      app.classList.remove('mode-horizontal')
+      wrappers.forEach((wrapper) => {
+        wrapper.classList.remove('is-hidden')
+      })
+      const targetWrapper = this.container.querySelector(`[data-page="${targetPage}"]`)
+      if (targetWrapper) {
+        targetWrapper.scrollIntoView({ block: 'center' })
+      }
+    }
+  }
+
+  goToPage(pageNum) {
+    const clampedPage = Math.max(1, Math.min(pageNum, this.pageCount))
+    if (clampedPage === this.currentPage && this.displayMode === 'horizontal') return
+
+    this.currentPage = clampedPage
+
+    if (this.displayMode === 'horizontal') {
+      const wrappers = this.container.querySelectorAll('.page-wrapper')
+      wrappers.forEach((wrapper) => {
+        const pNum = parseInt(wrapper.dataset.page, 10)
+        if (pNum === clampedPage) {
+          wrapper.classList.remove('is-hidden')
+        } else {
+          wrapper.classList.add('is-hidden')
+        }
+      })
+      this.ensurePageRendered(clampedPage)
+      this.container.dispatchEvent(new CustomEvent('viewer:pageChange', { detail: { page: clampedPage } }))
+    }
+  }
+
+  ensurePageRendered(pageNum) {
+    if (!this.renderedPages.has(pageNum)) {
+      const wrapper = this.container.querySelector(`[data-page="${pageNum}"]`)
+      if (wrapper) {
+        this.renderPage(wrapper, pageNum, this.qualityTier)
+      }
+    }
+  }
+
+  resetZoom() {
+    this.container.dispatchEvent(new CustomEvent('viewer:resetZoom'))
   }
 
   get pageCount() {
