@@ -1,7 +1,7 @@
 import { PdfViewer } from './viewer.js'
 import { ViewerControls } from './controls.js'
 
-const PDF_ID = 'test'
+const PDF_ID = 'test-bookmark'
 
 async function main() {
   const viewer = new PdfViewer('page-container', 'viewport')

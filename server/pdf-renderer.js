@@ -47,6 +47,42 @@ export function getPdfInfo(pdfId) {
   }
 }
 
+function normalizeOutlineItem(item, doc) {
+  let page = null
+  
+  if (typeof item.page === 'number') {
+    page = item.page + 1
+  } else if (item.uri && doc) {
+    try {
+      const pageIndex = doc.resolveLink(item.uri)
+      if (typeof pageIndex === 'number') {
+        page = pageIndex + 1
+      }
+    } catch (e) {}
+  }
+  
+  return {
+    title: item.title || 'Untitled',
+    page,
+    uri: item.uri || null,
+    children: item.down ? item.down.map(child => normalizeOutlineItem(child, doc)) : []
+  }
+}
+
+export function getPdfOutline(pdfId) {
+  const doc = getDocument(pdfId)
+  if (!doc) return []
+
+  try {
+    const outline = doc.loadOutline()
+    if (!outline || outline.length === 0) return []
+    return outline.map(item => normalizeOutlineItem(item, doc))
+  } catch (err) {
+    console.error(`Failed to load outline for ${pdfId}:`, err)
+    return []
+  }
+}
+
 export function renderPage(pdfId, pageNum, scale = 1.5) {
   if (scale < 0.5) scale = 0.5
   if (scale > 4.0) scale = 4.0

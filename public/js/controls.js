@@ -20,6 +20,10 @@ export class ViewerControls {
     this.zoomLevel = document.getElementById('zoom-level')
     this.pageIndicator = document.getElementById('page-indicator')
     this.toggleModeBtn = document.getElementById('toggle-mode')
+    this.toggleOutlineBtn = document.getElementById('toggle-outline')
+    this.outlinePanel = document.getElementById('outline-panel')
+    this.outlineTree = document.getElementById('outline-tree')
+    this.closeOutlineBtn = document.getElementById('close-outline')
 
     this.swipeStartX = 0
     this.swipeStartY = 0
@@ -48,6 +52,7 @@ export class ViewerControls {
     this.bindSwipeEvents()
     this.bindViewerEvents()
     this.bindAutoScrollEvents()
+    this.bindOutlineEvents()
     this.updateZoomDisplay()
     this.updateAutoScrollButton()
     this.updateAutoScrollSpeedDisplay()
@@ -328,7 +333,7 @@ bindModeEvents() {
     }
   }
 
-  bindAutoScrollEvents() {
+bindAutoScrollEvents() {
     const toggleBtn = document.getElementById('toggle-autoscroll')
     const speedInput = document.getElementById('autoscroll-speed')
 
@@ -337,7 +342,7 @@ bindModeEvents() {
     }
 
     if (speedInput) {
-speedInput.value = this.autoScrollSpeedPps
+      speedInput.value = this.autoScrollSpeedPps
       speedInput.addEventListener('input', (e) => {
         this.setAutoScrollSpeed(parseFloat(e.target.value) || 30)
       })
@@ -356,6 +361,84 @@ speedInput.value = this.autoScrollSpeedPps
         this.stopAutoScroll()
       }
     })
+  }
+
+  bindOutlineEvents() {
+    if (this.toggleOutlineBtn) {
+      this.toggleOutlineBtn.addEventListener('click', () => {
+        this.viewer.toggleOutline()
+      })
+    }
+
+    if (this.closeOutlineBtn) {
+      this.closeOutlineBtn.addEventListener('click', () => {
+        this.viewer.toggleOutline(false)
+      })
+    }
+
+    this.container.addEventListener('viewer:outlineLoaded', (e) => {
+      this.onOutlineLoaded(e.detail.items)
+    })
+
+    this.container.addEventListener('viewer:outlineToggle', (e) => {
+      this.updateOutlinePanel(e.detail.open)
+    })
+  }
+
+  onOutlineLoaded(items) {
+    if (!this.toggleOutlineBtn) return
+
+    if (items.length > 0) {
+      this.toggleOutlineBtn.style.display = ''
+      this.renderOutlineTree(items)
+    } else {
+      this.toggleOutlineBtn.style.display = 'none'
+    }
+  }
+
+  renderOutlineTree(items, level = 1) {
+    this.outlineTree.innerHTML = ''
+
+    const renderItems = (items, container, currentLevel) => {
+      items.forEach(item => {
+        const btn = document.createElement('button')
+        btn.className = `outline-item level-${Math.min(currentLevel, 5)}`
+        btn.textContent = item.title
+
+        if (item.page !== null) {
+          btn.addEventListener('click', () => {
+            this.viewer.navigateToPage(item.page)
+            this.updatePageIndicator()
+          })
+        } else if (item.uri && (item.uri.startsWith('http://') || item.uri.startsWith('https://'))) {
+          btn.addEventListener('click', () => {
+            window.open(item.uri, '_blank', 'noopener,noreferrer')
+          })
+        }
+
+        container.appendChild(btn)
+
+        if (item.children && item.children.length > 0) {
+          renderItems(item.children, container, currentLevel + 1)
+        }
+      })
+    }
+
+    renderItems(items, this.outlineTree, level)
+  }
+
+  updateOutlinePanel(isOpen) {
+    if (this.outlinePanel) {
+      if (isOpen) {
+        this.outlinePanel.classList.add('open')
+      } else {
+        this.outlinePanel.classList.remove('open')
+      }
+    }
+
+    if (this.toggleOutlineBtn) {
+      this.toggleOutlineBtn.setAttribute('aria-pressed', isOpen.toString())
+    }
   }
 
   destroy() {

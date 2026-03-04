@@ -17,11 +17,14 @@ export class PdfViewer {
     this.observer = null
     this.displayMode = 'vertical'
     this.currentPage = 1
+    this.outlineItems = []
+    this.outlineOpen = false
   }
 
   async load(pdfId) {
     this.pdfId = pdfId
     this.renderedPages.clear()
+    this.outlineItems = []
 
     const res = await fetch(`/api/pdf/${pdfId}/info`)
     if (!res.ok) throw new Error(`Failed to load PDF: ${res.statusText}`)
@@ -34,8 +37,53 @@ export class PdfViewer {
     })
 
     this.setupIntersectionObserver()
+    this.loadOutline()
 
     return this.pdfInfo
+  }
+
+  async loadOutline() {
+    try {
+      const res = await fetch(`/api/pdf/${this.pdfId}/outline`)
+      if (!res.ok) return
+      
+      const data = await res.json()
+      this.outlineItems = data.items || []
+      
+      this.container.dispatchEvent(new CustomEvent('viewer:outlineLoaded', {
+        detail: { items: this.outlineItems }
+      }))
+    } catch (err) {
+      console.error('Failed to load outline:', err)
+    }
+  }
+
+  hasOutline() {
+    return this.outlineItems.length > 0
+  }
+
+  toggleOutline(forceState) {
+    this.outlineOpen = forceState !== undefined ? forceState : !this.outlineOpen
+    this.container.dispatchEvent(new CustomEvent('viewer:outlineToggle', {
+      detail: { open: this.outlineOpen }
+    }))
+  }
+
+  navigateToPage(pageNum) {
+    const clampedPage = Math.max(1, Math.min(pageNum, this.pageCount))
+    
+    if (this.displayMode === 'horizontal') {
+      this.goToPage(clampedPage)
+    } else {
+      const wrapper = this.container.querySelector(`[data-page="${clampedPage}"]`)
+      if (wrapper) {
+        wrapper.scrollIntoView({ block: 'center' })
+      }
+    }
+    
+    if (this.outlineOpen) {
+      this.toggleOutline(false)
+    }
   }
 
   createPageWrapper(pageInfo, pageNum) {

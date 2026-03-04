@@ -1,6 +1,6 @@
 import express from 'express'
 import path from 'node:path'
-import { getPdfInfo, renderPage } from './pdf-renderer.js'
+import { getPdfInfo, renderPage, getPdfOutline } from './pdf-renderer.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -38,7 +38,13 @@ app.get('/api/pdf/:id/page/:pageNum', (req, res) => {
     'Content-Length': png.length,
     'Cache-Control': 'public, max-age=3600',
   })
-  res.send(png)
+res.send(png)
+})
+
+app.get('/api/pdf/:id/outline', (req, res) => {
+  const { id } = req.params
+  const items = getPdfOutline(id)
+  res.json({ items })
 })
 
 app.listen(PORT, '0.0.0.0', () => {
