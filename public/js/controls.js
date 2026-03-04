@@ -29,10 +29,10 @@ export class ViewerControls {
       maxScale: 5,
       minScale: 0.5,
       step: 0.15,
-      contain: 'inside',
-      cursor: 'grab',
+      cursor: 'default',
       animate: true,
       duration: 200,
+      disablePan: true,
     })
 
     this.viewport.addEventListener('wheel', (e) => {
