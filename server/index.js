@@ -41,6 +41,6 @@ app.get('/api/pdf/:id/page/:pageNum', (req, res) => {
   res.send(png)
 })
 
-app.listen(PORT, () => {
-  console.log(`PDF Viewer server running at http://localhost:${PORT}`)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`PDF Viewer server running at http://0.0.0.0:${PORT}`)
 })
