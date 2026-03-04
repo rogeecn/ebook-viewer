@@ -11,10 +11,32 @@
   <div id="app">
     <div id="header">
       <h1>PDF Library</h1>
-      <span id="pdf-count"></span>
+      <div class="header-right">
+        <div class="search-container">
+          <input type="text" id="search-input" placeholder="Search PDFs..." autocomplete="off">
+          <button id="search-clear" title="Clear search" style="display: none;">×</button>
+        </div>
+        <span id="pdf-count"></span>
+      </div>
     </div>
-    <div id="pdf-list">
-      <div class="loading">Loading...</div>
+    <div id="recent-section" style="display: none;">
+      <div class="section-header">
+        <h2>Recent Files</h2>
+        <button id="clear-recents" title="Clear recent files">Clear</button>
+      </div>
+      <div id="recent-list"></div>
+    </div>
+    <div id="tree-container">
+      <div id="tree-viewport">
+        <div id="tree-content">
+          <div id="top-spacer"></div>
+          <div id="visible-rows"></div>
+          <div id="bottom-spacer"></div>
+        </div>
+      </div>
+      <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-text">Loading...</div>
+      </div>
     </div>
   </div>
   <script type="module" src="/js/list.js"></script>

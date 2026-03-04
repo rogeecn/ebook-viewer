@@ -1,33 +1,31 @@
-async function loadPdfList() {
-  const listEl = document.getElementById('pdf-list')
-  const countEl = document.getElementById('pdf-count')
+const ROW_HEIGHT = 36
+const RECENTS_KEY = 'pdfLibrary.recents.v1'
+const MAX_RECENTS = 10
 
-  try {
-    const res = await fetch('/api/pdfs')
-    if (!res.ok) throw new Error('Failed to load PDF list')
-    
-    const pdfs = await res.json()
-    
-    countEl.textContent = `${pdfs.length} PDF${pdfs.length !== 1 ? 's' : ''}`
-    
-    if (pdfs.length === 0) {
-      listEl.innerHTML = '<div class="empty">No PDF files found</div>'
-      return
-    }
-    
-    listEl.innerHTML = pdfs.map(pdf => `
-      <a href="/view/${pdf.id}" class="pdf-item">
-        <div class="pdf-info">
-          <div class="pdf-filename">${escapeHtml(pdf.filename)}</div>
-          <div class="pdf-meta">${pdf.pageCount} pages · ${formatSize(pdf.size)}</div>
-        </div>
-        <span class="pdf-arrow">→</span>
-      </a>
-    `).join('')
-    
-  } catch (err) {
-    console.error('Failed to load PDF list:', err)
-    listEl.innerHTML = '<div class="empty">Failed to load PDF list</div>'
+const folderStore = new Map()
+const expandedFolders = new Set()
+let visibleRows = []
+let searchQuery = ''
+let isSearchMode = false
+let searchResults = []
+let rootLoaded = false
+
+const viewport = document.getElementById('tree-viewport')
+const topSpacer = document.getElementById('top-spacer')
+const bottomSpacer = document.getElementById('bottom-spacer')
+const visibleRowsEl = document.getElementById('visible-rows')
+const loadingOverlay = document.getElementById('loading-overlay')
+const searchInput = document.getElementById('search-input')
+const searchClear = document.getElementById('search-clear')
+const pdfCount = document.getElementById('pdf-count')
+const recentSection = document.getElementById('recent-section')
+const recentList = document.getElementById('recent-list')
+
+function debounce(fn, ms) {
+  let timer
+  return (...args) => {
+    clearTimeout(timer)
+    timer = setTimeout(() => fn(...args), ms)
   }
 }
 
@@ -45,4 +43,351 @@ function formatSize(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
-loadPdfList()
+function formatTimeAgo(ms) {
+  const seconds = Math.floor((Date.now() - ms) / 1000)
+  if (seconds < 60) return 'just now'
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago'
+  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago'
+  if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago'
+  return new Date(ms).toLocaleDateString()
+}
+
+function highlightMatch(text, query) {
+  if (!query) return escapeHtml(text)
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const index = lowerText.indexOf(lowerQuery)
+  if (index === -1) return escapeHtml(text)
+  
+  const before = text.slice(0, index)
+  const match = text.slice(index, index + query.length)
+  const after = text.slice(index + query.length)
+  
+  return escapeHtml(before) + '<span class="search-highlight">' + escapeHtml(match) + '</span>' + escapeHtml(after)
+}
+
+function getRecents() {
+  try {
+    const data = localStorage.getItem(RECENTS_KEY)
+    return data ? JSON.parse(data) : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecents(recents) {
+  try {
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(recents))
+  } catch {}
+}
+
+function addRecent(pdf) {
+  const recents = getRecents().filter(r => r.id !== pdf.id)
+  recents.unshift({
+    id: pdf.id,
+    name: pdf.name,
+    relPath: pdf.relPath,
+    lastOpenedAt: Date.now()
+  })
+  saveRecents(recents.slice(0, MAX_RECENTS))
+  renderRecents()
+}
+
+function clearRecents() {
+  saveRecents([])
+  renderRecents()
+}
+
+function renderRecents() {
+  const recents = getRecents()
+  if (recents.length === 0) {
+    recentSection.style.display = 'none'
+    return
+  }
+  
+  recentSection.style.display = 'block'
+  recentList.innerHTML = recents.map(r => `
+    <a href="/view/${r.id}" class="recent-item" data-pdf-id="${r.id}">
+      <div class="recent-info">
+        <div class="recent-name">${escapeHtml(r.name)}</div>
+        <div class="recent-meta">${formatTimeAgo(r.lastOpenedAt)}</div>
+      </div>
+    </a>
+  `).join('')
+  
+  recentList.querySelectorAll('.recent-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const id = el.dataset.pdfId
+      const recents = getRecents()
+      const pdf = recents.find(r => r.id === id)
+      if (pdf) addRecent(pdf)
+    })
+  })
+}
+
+async function fetchRoot() {
+  showLoading(true)
+  try {
+    const res = await fetch('/api/tree')
+    if (!res.ok) throw new Error('Failed to load')
+    const data = await res.json()
+    folderStore.set('', data)
+    rootLoaded = true
+    updatePdfCount()
+    computeVisibleRows()
+    render()
+  } catch (err) {
+    console.error('Failed to load tree:', err)
+    visibleRowsEl.innerHTML = '<div class="empty-state"><h3>Error loading PDFs</h3><p>Please refresh the page</p></div>'
+  } finally {
+    showLoading(false)
+  }
+}
+
+async function fetchFolder(folderPath) {
+  try {
+    const url = folderPath ? `/api/tree/${encodeURIComponent(folderPath)}` : '/api/tree'
+    const res = await fetch(url)
+    if (!res.ok) throw new Error('Failed to load folder')
+    const data = await res.json()
+    folderStore.set(folderPath, data)
+    return data
+  } catch (err) {
+    console.error(`Failed to load folder ${folderPath}:`, err)
+    return null
+  }
+}
+
+async function performSearch(query) {
+  if (!query || query.trim() === '') {
+    exitSearch()
+    return
+  }
+  
+  searchQuery = query.trim()
+  isSearchMode = true
+  showLoading(true)
+  
+  try {
+    const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&limit=500`)
+    if (!res.ok) throw new Error('Search failed')
+    const data = await res.json()
+    searchResults = data.results || []
+    computeVisibleRows()
+    render()
+    updatePdfCount()
+  } catch (err) {
+    console.error('Search failed:', err)
+    searchResults = []
+  } finally {
+    showLoading(false)
+  }
+}
+
+function exitSearch() {
+  isSearchMode = false
+  searchQuery = ''
+  searchResults = []
+  searchInput.value = ''
+  searchClear.style.display = 'none'
+  computeVisibleRows()
+  render()
+  updatePdfCount()
+}
+
+function toggleFolder(folderPath) {
+  if (expandedFolders.has(folderPath)) {
+    expandedFolders.delete(folderPath)
+  } else {
+    expandedFolders.add(folderPath)
+  }
+  computeVisibleRows()
+  render()
+}
+
+async function expandFolder(folderPath) {
+  if (expandedFolders.has(folderPath)) {
+    expandedFolders.delete(folderPath)
+    computeVisibleRows()
+    render()
+    return
+  }
+  
+  const folder = folderStore.get(folderPath)
+  if (!folder || !folder.loaded) {
+    showLoading(true)
+    await fetchFolder(folderPath)
+    showLoading(false)
+  }
+  
+  expandedFolders.add(folderPath)
+  computeVisibleRows()
+  render()
+}
+
+function computeVisibleRows() {
+  visibleRows = []
+  
+  if (isSearchMode) {
+    searchResults.forEach(pdf => {
+      visibleRows.push({
+        type: 'pdf',
+        data: pdf,
+        depth: 0,
+        isSearchResult: true
+      })
+    })
+    return
+  }
+  
+  function addFolderRows(folderPath, depth) {
+    const folder = folderStore.get(folderPath)
+    if (!folder || !folder.children) return
+    
+    folder.children.folders.forEach(childFolder => {
+      visibleRows.push({
+        type: 'folder',
+        data: childFolder,
+        depth,
+        isExpanded: expandedFolders.has(childFolder.path)
+      })
+      
+      if (expandedFolders.has(childFolder.path)) {
+        addFolderRows(childFolder.path, depth + 1)
+      }
+    })
+    
+    folder.children.pdfs.forEach(pdf => {
+      visibleRows.push({
+        type: 'pdf',
+        data: pdf,
+        depth
+      })
+    })
+  }
+  
+  if (rootLoaded) {
+    addFolderRows('', 0)
+  }
+}
+
+function render() {
+  const scrollTop = viewport.scrollTop
+  const viewportHeight = viewport.clientHeight
+  
+  const totalHeight = visibleRows.length * ROW_HEIGHT
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - 10)
+  const endIndex = Math.min(visibleRows.length, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + 10)
+  
+  topSpacer.style.height = startIndex * ROW_HEIGHT + 'px'
+  bottomSpacer.style.height = (totalHeight - endIndex * ROW_HEIGHT) + 'px'
+  
+  const rows = visibleRows.slice(startIndex, endIndex)
+  let html = ''
+  
+  rows.forEach((row, i) => {
+    const top = (startIndex + i) * ROW_HEIGHT
+    
+    if (row.type === 'folder') {
+      const hasChildren = row.data.hasChildren
+      const isExpanded = row.isExpanded
+      
+      html += `
+        <div class="tree-row folder-row ${isExpanded ? 'expanded' : ''}" 
+             style="position: absolute; top: ${top}px; width: 100%;" 
+             data-folder-path="${escapeHtml(row.data.path)}">
+          <div class="row-indent" style="width: ${row.depth * 20}px;">
+            ${Array(row.depth).fill('<span class="indent-unit"></span>').join('')}
+          </div>
+          <span class="folder-toggle ${isExpanded ? 'expanded' : ''} ${hasChildren ? '' : 'empty'}">▶</span>
+          <span class="row-icon folder-icon">📁</span>
+          <div class="row-content">
+            <span class="row-name">${escapeHtml(row.data.name)}</span>
+            <span class="row-counts">${row.data.counts?.totalPdfs || 0} PDFs</span>
+          </div>
+        </div>
+      `
+    } else {
+      const pdf = row.data
+      const nameClass = row.isSearchResult ? 'row-name search-match' : 'row-name'
+      const displayName = row.isSearchResult ? highlightMatch(pdf.name, searchQuery) : escapeHtml(pdf.name)
+      
+      html += `
+        <a class="tree-row pdf-row" 
+           style="position: absolute; top: ${top}px; width: 100%;" 
+           href="/view/${pdf.id}" 
+           data-pdf-id="${pdf.id}"
+           data-pdf-name="${escapeHtml(pdf.name)}"
+           data-pdf-rel-path="${escapeHtml(pdf.relPath || '')}">
+          <div class="row-indent" style="width: ${row.depth * 20}px;">
+            ${Array(row.depth).fill('<span class="indent-unit"></span>').join('')}
+          </div>
+          <span class="folder-toggle empty"></span>
+          <span class="row-icon pdf-icon">📄</span>
+          <div class="row-content">
+            <span class="${nameClass}">${displayName}</span>
+            <span class="row-meta">${pdf.pageCount || 0} pages · ${formatSize(pdf.size || 0)}</span>
+          </div>
+        </a>
+      `
+    }
+  })
+  
+  visibleRowsEl.innerHTML = html
+  
+  visibleRowsEl.querySelectorAll('.folder-row').forEach(el => {
+    el.addEventListener('click', () => {
+      const folderPath = el.dataset.folderPath
+      expandFolder(folderPath)
+    })
+  })
+  
+  visibleRowsEl.querySelectorAll('.pdf-row').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.pdfId
+      const name = el.dataset.pdfName
+      const relPath = el.dataset.pdfRelPath
+      addRecent({ id, name, relPath })
+    })
+  })
+}
+
+function showLoading(show) {
+  loadingOverlay.classList.toggle('hidden', !show)
+}
+
+function updatePdfCount() {
+  if (isSearchMode) {
+    pdfCount.textContent = `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`
+  } else {
+    const root = folderStore.get('')
+    const total = root?.counts?.totalPdfs || 0
+    pdfCount.textContent = `${total} PDF${total !== 1 ? 's' : ''}`
+  }
+}
+
+function handleScroll() {
+  requestAnimationFrame(render)
+}
+
+function handleSearchInput(e) {
+  const query = e.target.value
+  searchClear.style.display = query ? 'block' : 'none'
+  debounce(performSearch, 200)(query)
+}
+
+function init() {
+  viewport.addEventListener('scroll', handleScroll, { passive: true })
+  searchInput.addEventListener('input', handleSearchInput)
+  searchClear.addEventListener('click', () => {
+    searchInput.value = ''
+    searchClear.style.display = 'none'
+    exitSearch()
+  })
+  document.getElementById('clear-recents').addEventListener('click', clearRecents)
+  
+  renderRecents()
+  fetchRoot()
+}
+
+init()

@@ -1,7 +1,7 @@
 import express from 'express'
 import path from 'node:path'
 import { getPdfInfo, renderPage, getPdfOutline } from './pdf-renderer.js'
-import { getAllPdfs, startPeriodicScan } from './pdf-index.js'
+import { getAllPdfs, startPeriodicScan, getFolderNode, listSearchResults, getPdfsByIds, getPdfById } from './pdf-index.js'
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -9,8 +9,49 @@ const PORT = process.env.PORT || 3000
 app.use(express.static(path.resolve('public')))
 
 app.get('/api/pdfs', (req, res) => {
-  const pdfs = getAllPdfs()
-  res.json(pdfs)
+  const { ids, flat } = req.query
+  
+  if (ids) {
+    const idList = ids.split(',').filter(Boolean)
+    return res.json(getPdfsByIds(idList))
+  }
+  
+  if (flat === '1') {
+    const pdfs = getAllPdfs()
+    return res.json(pdfs)
+  }
+  
+  res.json(getFolderNode(''))
+})
+
+app.get('/api/tree', (req, res) => {
+  const node = getFolderNode('')
+  if (!node) {
+    return res.status(404).json({ error: 'Root folder not found' })
+  }
+  res.json(node)
+})
+
+app.get('/api/tree/{*path}', (req, res) => {
+  const folderPath = decodeURIComponent(req.params.path || '')
+  const node = getFolderNode(folderPath)
+  
+  if (!node) {
+    return res.status(404).json({ error: `Folder "${folderPath}" not found` })
+  }
+  
+  res.json(node)
+})
+
+app.get('/api/search', (req, res) => {
+  const { q, limit } = req.query
+  
+  if (!q || q.trim() === '') {
+    return res.json({ query: '', results: [] })
+  }
+  
+  const results = listSearchResults(q, { limit: parseInt(limit, 10) || 200 })
+  res.json({ query: q, results })
 })
 
 app.get('/api/pdf/:id/info', (req, res) => {
@@ -51,6 +92,24 @@ app.get('/api/pdf/:id/outline', (req, res) => {
   const { id } = req.params
   const items = getPdfOutline(id)
   res.json({ items })
+})
+
+app.get('/api/pdf/:id/meta', (req, res) => {
+  const { id } = req.params
+  const entry = getPdfById(id)
+  
+  if (!entry) {
+    return res.status(404).json({ error: `PDF "${id}" not found` })
+  }
+  
+  res.json({
+    id: entry.id,
+    name: entry.name,
+    relPath: entry.relPath,
+    dirPath: entry.dirPath,
+    pageCount: entry.pageCount,
+    size: entry.size
+  })
 })
 
 app.get('/view/{*splat}', (req, res) => {
