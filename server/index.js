@@ -53,7 +53,7 @@ app.get('/api/pdf/:id/outline', (req, res) => {
   res.json({ items })
 })
 
-app.get('/view/*', (req, res) => {
+app.get('/view/{*splat}', (req, res) => {
   res.sendFile(path.resolve('public/view.html'))
 })
 
