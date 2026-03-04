@@ -1,9 +1,8 @@
 import * as fs from 'node:fs'
-import * as path from 'node:path'
 import * as mupdf from 'mupdf'
 import { LRUCache } from './cache.js'
+import { getPdfById } from './pdf-index.js'
 
-const PDF_DIR = path.resolve('pdfs')
 const imageCache = new LRUCache(100)
 const docCache = new Map()
 
@@ -12,12 +11,12 @@ function getDocument(pdfId) {
     return docCache.get(pdfId)
   }
 
-  const filePath = path.join(PDF_DIR, `${pdfId}.pdf`)
-  if (!fs.existsSync(filePath)) {
+  const entry = getPdfById(pdfId)
+  if (!entry) {
     return null
   }
 
-  const buffer = fs.readFileSync(filePath)
+  const buffer = fs.readFileSync(entry.filePath)
   const doc = mupdf.Document.openDocument(buffer, 'application/pdf')
   docCache.set(pdfId, doc)
   return doc
@@ -40,8 +39,10 @@ export function getPdfInfo(pdfId) {
     })
   }
 
+  const entry = getPdfById(pdfId)
   return {
     id: pdfId,
+    filename: entry?.filename,
     pageCount,
     pages,
   }
