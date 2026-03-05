@@ -2,17 +2,17 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 import * as mupdf from 'mupdf'
-import { loadCache, saveCacheAtomically, buildCacheData, getCachePath } from './pdf-cache.js'
+import { loadCache, saveCacheAtomically, buildCacheData, getCachePath } from './ebook-cache.js'
 import { isSupportedFile, getMimeType } from './formats.js'
 
-const PDF_DIR = process.env.PDF_DIR || path.resolve('pdfs')
+const EBOOK_DIR = process.env.EBOOK_DIR || path.resolve('ebooks')
 const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '1800000', 10)
 
 /**
- * @typedef {Object} PdfEntry
+ * @typedef {Object} EbookEntry
  * @property {string} id - MD5 hash of relative path
  * @property {string} name - Filename (basename)
- * @property {string} relPath - Relative path from PDF_DIR (POSIX separators)
+ * @property {string} relPath - Relative path from EBOOK_DIR (POSIX separators)
  * @property {string} dirPath - Directory path (parent folder, POSIX)
  * @property {number} pageCount - Number of pages
  * @property {number} size - File size in bytes
@@ -22,19 +22,19 @@ const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '1800000', 10)
 
 /**
  * @typedef {Object} FolderSummary
- * @property {string} path - Folder path relative to PDF_DIR ("" for root)
+ * @property {string} path - Folder path relative to EBOOK_DIR ("" for root)
  * @property {string} name - Folder name ("" for root)
  * @property {string[]} childFolders - Direct child folder names
- * @property {string[]} childPdfIds - Direct child PDF ids
+ * @property {string[]} childEbookIds - Direct child ebook ids
  * @property {number} folderCount - Count of direct child folders
- * @property {number} pdfCount - Count of direct child PDFs
- * @property {number} totalPdfCount - Total PDFs in subtree
+ * @property {number} ebookCount - Count of direct child ebooks
+ * @property {number} totalEbookCount - Total ebooks in subtree
  */
 
-/** @type {Map<string, PdfEntry>} */
+/** @type {Map<string, EbookEntry>} */
 const byId = new Map()
 
-/** @type {Map<string, PdfEntry>} */
+/** @type {Map<string, EbookEntry>} */
 const byRelPath = new Map()
 
 /** @type {Map<string, FolderSummary>} */
@@ -77,10 +77,10 @@ function ensureFolderExists(folderPath) {
     path: folderPath,
     name,
     childFolders: [],
-    childPdfIds: [],
+    childEbookIds: [],
     folderCount: 0,
-    pdfCount: 0,
-    totalPdfCount: 0
+    ebookCount: 0,
+    totalEbookCount: 0
   })
   
   if (parts.length > 1) {
@@ -92,9 +92,9 @@ function ensureFolderExists(folderPath) {
 function updateFolderRelationships() {
   for (const folder of folderIndex.values()) {
     folder.childFolders = []
-    folder.childPdfIds = []
+    folder.childEbookIds = []
     folder.folderCount = 0
-    folder.pdfCount = 0
+    folder.ebookCount = 0
   }
   
   for (const entry of byId.values()) {
@@ -102,8 +102,8 @@ function updateFolderRelationships() {
     ensureFolderExists(parentPath)
     const folder = folderIndex.get(parentPath)
     if (folder) {
-      folder.childPdfIds.push(entry.id)
-      folder.pdfCount++
+      folder.childEbookIds.push(entry.id)
+      folder.ebookCount++
     }
   }
   
@@ -124,14 +124,14 @@ function updateFolderRelationships() {
     const folder = folderIndex.get(folderPath)
     if (!folder) return 0
     
-    let total = folder.pdfCount
+    let total = folder.ebookCount
     
     for (const childName of folder.childFolders) {
       const childPath = folderPath ? `${folderPath}/${childName}` : childName
       total += calculateTotals(childPath)
     }
     
-    folder.totalPdfCount = total
+    folder.totalEbookCount = total
     return total
   }
   
@@ -140,11 +140,11 @@ function updateFolderRelationships() {
 }
 
 export function scanDirectoryRecursive() {
-  console.log(`Scanning document directory recursively: ${PDF_DIR}`)
+  console.log(`Scanning document directory recursively: ${EBOOK_DIR}`)
   
-  if (!fs.existsSync(PDF_DIR)) {
-    console.warn(`PDF directory does not exist: ${PDF_DIR}, creating...`)
-    fs.mkdirSync(PDF_DIR, { recursive: true })
+  if (!fs.existsSync(EBOOK_DIR)) {
+    console.warn(`Ebook directory does not exist: ${EBOOK_DIR}, creating...`)
+    fs.mkdirSync(EBOOK_DIR, { recursive: true })
     return
   }
   
@@ -153,7 +153,7 @@ export function scanDirectoryRecursive() {
   let updated = 0
   let skipped = 0
   
-  const stack = [{ absDir: PDF_DIR, relDir: '' }]
+  const stack = [{ absDir: EBOOK_DIR, relDir: '' }]
   
   while (stack.length > 0) {
     const { absDir, relDir } = stack.pop()
@@ -189,7 +189,7 @@ export function scanDirectoryRecursive() {
           const metadata = extractMetadata(absPath)
           const id = hashRelPath(normalizedRelPath)
           
-          const pdfEntry = {
+          const ebookEntry = {
             id,
             name,
             relPath: normalizedRelPath,
@@ -204,8 +204,8 @@ export function scanDirectoryRecursive() {
             byId.delete(existing.id)
           }
           
-          byId.set(id, pdfEntry)
-          byRelPath.set(normalizedRelPath, pdfEntry)
+          byId.set(id, ebookEntry)
+          byRelPath.set(normalizedRelPath, ebookEntry)
           
           if (existing) {
             updated++
@@ -236,16 +236,16 @@ export function scanDirectoryRecursive() {
   console.log(`Scan complete: ${byId.size} documents indexed (${added} added, ${updated} updated, ${skipped} unchanged, ${removed} removed)`)
 }
 
-export function getAllPdfs() {
+export function getAllEbooks() {
   return Array.from(byId.values())
     .sort((a, b) => a.relPath.localeCompare(b.relPath))
 }
 
-export function getPdfById(id) {
+export function getEbookById(id) {
   return byId.get(id) || null
 }
 
-export function getPdfByRelPath(relPath) {
+export function getEbookByRelPath(relPath) {
   return byRelPath.get(relPath) || null
 }
 
@@ -254,20 +254,20 @@ export function getPdfByRelPath(relPath) {
  * @param {string} folderPath - Folder path ("" for root)
  * @param {Object} opts - Options
  * @param {number} opts.limitFolders - Max folders to return
- * @param {number} opts.limitPdfs - Max PDFs to return
+ * @param {number} opts.limitEbooks - Max ebooks to return
  */
 export function getFolderNode(folderPath, {
   limitFolders = 200,
-  limitPdfs = 200
+  limitEbooks = 200
 } = {}) {
   const folder = folderIndex.get(folderPath)
   if (!folder) return null
   
   const childFolders = folder.childFolders.slice(0, limitFolders)
-  const childPdfIds = folder.childPdfIds.slice(0, limitPdfs)
+  const childEbookIds = folder.childEbookIds.slice(0, limitEbooks)
   
   const hasMoreFolders = folder.childFolders.length > limitFolders
-  const hasMorePdfs = folder.childPdfIds.length > limitPdfs
+  const hasMoreEbooks = folder.childEbookIds.length > limitEbooks
   
   const folders = childFolders.map(name => {
     const childPath = folderPath ? `${folderPath}/${name}` : name
@@ -278,20 +278,20 @@ export function getFolderNode(folderPath, {
       name,
       counts: {
         folders: childFolder?.folderCount || 0,
-        pdfs: childFolder?.pdfCount || 0,
-        totalPdfs: childFolder?.totalPdfCount || 0
+        ebooks: childFolder?.ebookCount || 0,
+        totalEbooks: childFolder?.totalEbookCount || 0
       },
-      hasChildren: (childFolder?.folderCount || 0) > 0 || (childFolder?.pdfCount || 0) > 0,
+      hasChildren: (childFolder?.folderCount || 0) > 0 || (childFolder?.ebookCount || 0) > 0,
       loaded: false
     }
   })
   
-  // Build PDF nodes
-  const pdfs = childPdfIds.map(id => {
+  // Build ebook nodes
+  const ebooks = childEbookIds.map(id => {
     const entry = byId.get(id)
     if (!entry) return null
     return {
-      type: 'pdf',
+      type: 'ebook',
       id: entry.id,
       name: entry.name,
       relPath: entry.relPath,
@@ -308,23 +308,23 @@ export function getFolderNode(folderPath, {
     name: folder.name || 'Root',
     counts: {
       folders: folder.folderCount,
-      pdfs: folder.pdfCount,
-      totalPdfs: folder.totalPdfCount
+      ebooks: folder.ebookCount,
+      totalEbooks: folder.totalEbookCount
     },
     children: {
       folders,
-      pdfs
+      ebooks
     },
     hasMore: {
       folders: hasMoreFolders,
-      pdfs: hasMorePdfs
+      ebooks: hasMoreEbooks
     },
     loaded: true
   }
 }
 
 /**
- * Search PDFs by filename
+ * Search ebooks by filename
  * @param {string} query - Search query
  * @param {Object} opts - Options
  * @param {number} opts.limit - Max results
@@ -373,10 +373,10 @@ export function listSearchResults(query, {
 }
 
 /**
- * Get multiple PDFs by IDs
- * @param {string[]} ids - Array of PDF IDs
+ * Get multiple ebooks by IDs
+ * @param {string[]} ids - Array of ebook IDs
  */
-export function getPdfsByIds(ids) {
+export function getEbooksByIds(ids) {
   return ids
     .map(id => byId.get(id))
     .filter(Boolean)
@@ -393,13 +393,13 @@ export function getPdfsByIds(ids) {
 
 export function startPeriodicScan() {
   const cachePath = getCachePath()
-  const cached = loadCache(cachePath, PDF_DIR)
+  const cached = loadCache(cachePath, EBOOK_DIR)
   
   if (cached) {
-    for (const pdf of cached.pdfs) {
+    for (const ebook of cached.ebooks) {
       const entry = {
-        ...pdf,
-        filePath: path.join(PDF_DIR, pdf.relPath)
+        ...ebook,
+        filePath: path.join(EBOOK_DIR, ebook.relPath)
       }
       byId.set(entry.id, entry)
       byRelPath.set(entry.relPath, entry)
@@ -414,7 +414,7 @@ export function startPeriodicScan() {
     setTimeout(() => {
       try {
         scanDirectoryRecursive()
-        const cacheData = buildCacheData(byId, folderIndex, PDF_DIR)
+        const cacheData = buildCacheData(byId, folderIndex, EBOOK_DIR)
         saveCacheAtomically(cachePath, cacheData)
       } catch (err) {
         console.error('Background sync failed:', err)
@@ -422,14 +422,14 @@ export function startPeriodicScan() {
     }, 100)
   } else {
     scanDirectoryRecursive()
-    const cacheData = buildCacheData(byId, folderIndex, PDF_DIR)
+    const cacheData = buildCacheData(byId, folderIndex, EBOOK_DIR)
     saveCacheAtomically(cachePath, cacheData)
   }
   
   setInterval(() => {
     try {
       scanDirectoryRecursive()
-      const cacheData = buildCacheData(byId, folderIndex, PDF_DIR)
+      const cacheData = buildCacheData(byId, folderIndex, EBOOK_DIR)
       saveCacheAtomically(cachePath, cacheData)
     } catch (err) {
       console.error('Periodic scan failed:', err)

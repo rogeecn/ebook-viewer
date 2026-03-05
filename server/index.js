@@ -1,7 +1,7 @@
 import express from 'express'
 import path from 'node:path'
-import { getPdfInfo, renderPage, getPdfOutline, getPageText } from './pdf-renderer.js'
-import { getAllPdfs, startPeriodicScan, getFolderNode, listSearchResults, getPdfsByIds, getPdfById } from './pdf-index.js'
+import { getEbookInfo, renderPage, getEbookOutline, getPageText } from './ebook-renderer.js'
+import { getAllEbooks, startPeriodicScan, getFolderNode, listSearchResults, getEbooksByIds, getEbookById } from './ebook-index.js'
 import { loadProgress, getProgress, setProgress, getAllProgress } from './progress-store.js'
 
 const app = express()
@@ -10,17 +10,17 @@ const PORT = process.env.PORT || 3000
 app.use(express.static(path.resolve('public')))
 app.use(express.json())
 
-app.get('/api/pdfs', (req, res) => {
+app.get('/api/ebooks', (req, res) => {
   const { ids, flat } = req.query
   
   if (ids) {
     const idList = ids.split(',').filter(Boolean)
-    return res.json(getPdfsByIds(idList))
+    return res.json(getEbooksByIds(idList))
   }
   
   if (flat === '1') {
-    const pdfs = getAllPdfs()
-    return res.json(pdfs)
+    const ebooks = getAllEbooks()
+    return res.json(ebooks)
   }
   
   res.json(getFolderNode(''))
@@ -56,18 +56,18 @@ app.get('/api/search', (req, res) => {
   res.json({ query: q, results })
 })
 
-app.get('/api/pdf/:id/info', (req, res) => {
+app.get('/api/ebook/:id/info', (req, res) => {
   const { id } = req.params
-  const info = getPdfInfo(id)
+  const info = getEbookInfo(id)
 
   if (!info) {
-    return res.status(404).json({ error: `PDF "${id}" not found` })
+    return res.status(404).json({ error: `Ebook "${id}" not found` })
   }
 
   res.json(info)
 })
 
-app.get('/api/pdf/:id/page/:pageNum', (req, res) => {
+app.get('/api/ebook/:id/page/:pageNum', (req, res) => {
   const { id, pageNum } = req.params
   const scale = parseFloat(req.query.scale) || 1.5
   const page = parseInt(pageNum, 10)
@@ -79,7 +79,7 @@ app.get('/api/pdf/:id/page/:pageNum', (req, res) => {
   const png = renderPage(id, page, scale)
 
   if (!png) {
-    return res.status(404).json({ error: `Page ${page} not found for PDF "${id}"` })
+    return res.status(404).json({ error: `Page ${page} not found for ebook "${id}"` })
   }
 
   res.set({
@@ -90,7 +90,7 @@ app.get('/api/pdf/:id/page/:pageNum', (req, res) => {
   res.send(png)
 })
 
-app.get('/api/pdf/:id/page/:pageNum/text', (req, res) => {
+app.get('/api/ebook/:id/page/:pageNum/text', (req, res) => {
   const { id, pageNum } = req.params
   const page = parseInt(pageNum, 10)
 
@@ -101,25 +101,25 @@ app.get('/api/pdf/:id/page/:pageNum/text', (req, res) => {
   const textData = getPageText(id, page)
 
   if (!textData) {
-    return res.status(404).json({ error: `Page ${page} not found for PDF "${id}"` })
+    return res.status(404).json({ error: `Page ${page} not found for ebook "${id}"` })
   }
 
   res.set({ 'Cache-Control': 'public, max-age=3600' })
   res.json(textData)
 })
 
-app.get('/api/pdf/:id/outline', (req, res) => {
+app.get('/api/ebook/:id/outline', (req, res) => {
   const { id } = req.params
-  const items = getPdfOutline(id)
+  const items = getEbookOutline(id)
   res.json({ items })
 })
 
-app.get('/api/pdf/:id/meta', (req, res) => {
+app.get('/api/ebook/:id/meta', (req, res) => {
   const { id } = req.params
-  const entry = getPdfById(id)
+  const entry = getEbookById(id)
   
   if (!entry) {
-    return res.status(404).json({ error: `PDF "${id}" not found` })
+    return res.status(404).json({ error: `Ebook "${id}" not found` })
   }
   
   res.json({
@@ -169,5 +169,5 @@ loadProgress()
 startPeriodicScan()
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`PDF Library server running at http://0.0.0.0:${PORT}`)
+  console.log(`Ebook Library server running at http://0.0.0.0:${PORT}`)
 })

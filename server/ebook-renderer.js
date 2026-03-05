@@ -1,18 +1,18 @@
 import * as fs from 'node:fs'
 import * as mupdf from 'mupdf'
 import { LRUCache } from './cache.js'
-import { getPdfById } from './pdf-index.js'
+import { getEbookById } from './ebook-index.js'
 import { getMimeType } from './formats.js'
 
 const imageCache = new LRUCache(100)
 const docCache = new Map()
 
-function getDocument(pdfId) {
-  if (docCache.has(pdfId)) {
-    return docCache.get(pdfId)
+function getDocument(ebookId) {
+  if (docCache.has(ebookId)) {
+    return docCache.get(ebookId)
   }
 
-  const entry = getPdfById(pdfId)
+  const entry = getEbookById(ebookId)
   if (!entry) {
     return null
   }
@@ -20,12 +20,12 @@ function getDocument(pdfId) {
   const buffer = fs.readFileSync(entry.filePath)
   const magic = getMimeType(entry.filePath)
   const doc = mupdf.Document.openDocument(buffer, magic)
-  docCache.set(pdfId, doc)
+  docCache.set(ebookId, doc)
   return doc
 }
 
-export function getPdfInfo(pdfId) {
-  const doc = getDocument(pdfId)
+export function getEbookInfo(ebookId) {
+  const doc = getDocument(ebookId)
   if (!doc) return null
 
   const pageCount = doc.countPages()
@@ -41,9 +41,9 @@ export function getPdfInfo(pdfId) {
     })
   }
 
-  const entry = getPdfById(pdfId)
+  const entry = getEbookById(ebookId)
   return {
-    id: pdfId,
+    id: ebookId,
     filename: entry?.name,
     pageCount,
     pages,
@@ -72,8 +72,8 @@ function normalizeOutlineItem(item, doc) {
   }
 }
 
-export function getPdfOutline(pdfId) {
-  const doc = getDocument(pdfId)
+export function getEbookOutline(ebookId) {
+  const doc = getDocument(ebookId)
   if (!doc) return []
 
   try {
@@ -81,19 +81,19 @@ export function getPdfOutline(pdfId) {
     if (!outline || outline.length === 0) return []
     return outline.map(item => normalizeOutlineItem(item, doc))
   } catch (err) {
-    console.error(`Failed to load outline for ${pdfId}:`, err)
+    console.error(`Failed to load outline for ${ebookId}:`, err)
     return []
   }
 }
 
 const textCache = new LRUCache(200)
 
-export function getPageText(pdfId, pageNum) {
-  const cacheKey = `${pdfId}:${pageNum}:text`
+export function getPageText(ebookId, pageNum) {
+  const cacheKey = `${ebookId}:${pageNum}:text`
   const cached = textCache.get(cacheKey)
   if (cached) return cached
 
-  const doc = getDocument(pdfId)
+  const doc = getDocument(ebookId)
   if (!doc) return null
 
   const pageCount = doc.countPages()
@@ -115,17 +115,17 @@ export function getPageText(pdfId, pageNum) {
   return result
 }
 
-export function renderPage(pdfId, pageNum, scale = 1.5) {
+export function renderPage(ebookId, pageNum, scale = 1.5) {
   if (scale < 0.5) scale = 0.5
   if (scale > 4.0) scale = 4.0
 
-  const cacheKey = `${pdfId}:${pageNum}:${scale}`
+  const cacheKey = `${ebookId}:${pageNum}:${scale}`
   const cached = imageCache.get(cacheKey)
   if (cached) {
     return cached
   }
 
-  const doc = getDocument(pdfId)
+  const doc = getDocument(ebookId)
   if (!doc) return null
 
   const pageCount = doc.countPages()

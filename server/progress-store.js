@@ -52,12 +52,12 @@ function saveProgress() {
   }
 }
 
-export function getProgress(pdfId) {
-  return progressMap.get(pdfId) || null
+export function getProgress(ebookId) {
+  return progressMap.get(ebookId) || null
 }
 
-export function setProgress(pdfId, page) {
-  progressMap.set(pdfId, { page, updatedAt: Date.now() })
+export function setProgress(ebookId, page) {
+  progressMap.set(ebookId, { page, updatedAt: Date.now() })
   saveProgress()
 }
 

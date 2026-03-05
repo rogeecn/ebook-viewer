@@ -1,14 +1,14 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-const CACHE_VERSION = 3
-const CACHE_FILENAME = 'pdf-cache.json'
+const CACHE_VERSION = 4
+const CACHE_FILENAME = 'ebook-cache.json'
 
 export function getCachePath() {
-  return process.env.PDF_CACHE_PATH || path.resolve(CACHE_FILENAME)
+  return process.env.EBOOK_CACHE_PATH || path.resolve(CACHE_FILENAME)
 }
 
-export function loadCache(cachePath, pdfDir) {
+export function loadCache(cachePath, ebookDir) {
   try {
     if (!fs.existsSync(cachePath)) {
       return null
@@ -22,13 +22,13 @@ export function loadCache(cachePath, pdfDir) {
       return null
     }
     
-    if (data.pdfDir !== pdfDir) {
-      console.log('PDF directory changed, rebuilding cache...')
+    if (data.ebookDir !== ebookDir) {
+      console.log('Ebook directory changed, rebuilding cache...')
       return null
     }
     
     return {
-      pdfs: data.pdfs || [],
+      ebooks: data.ebooks || [],
       folders: data.folders || [],
       generatedAt: data.generatedAt
     }
@@ -54,8 +54,8 @@ export function saveCacheAtomically(cachePath, data) {
   }
 }
 
-export function buildCacheData(byId, folderIndex, pdfDir) {
-  const pdfs = Array.from(byId.values()).map(entry => ({
+export function buildCacheData(byId, folderIndex, ebookDir) {
+  const ebooks = Array.from(byId.values()).map(entry => ({
     id: entry.id,
     name: entry.name,
     relPath: entry.relPath,
@@ -69,17 +69,17 @@ export function buildCacheData(byId, folderIndex, pdfDir) {
     path: folder.path,
     name: folder.name,
     childFolders: folder.childFolders,
-    childPdfIds: folder.childPdfIds,
+    childEbookIds: folder.childEbookIds,
     folderCount: folder.folderCount,
-    pdfCount: folder.pdfCount,
-    totalPdfCount: folder.totalPdfCount
+    ebookCount: folder.ebookCount,
+    totalEbookCount: folder.totalEbookCount
   }))
   
   return {
     version: CACHE_VERSION,
-    pdfDir,
+    ebookDir,
     generatedAt: Date.now(),
-    pdfs,
+    ebooks,
     folders
   }
 }
