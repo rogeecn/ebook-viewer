@@ -96,11 +96,6 @@ async function main() {
       name: info.filename || 'Unknown'
     })
 
-    const savedPage = await fetchSavedProgress(pdfId)
-    if (savedPage && savedPage > 1 && savedPage <= info.pageCount) {
-      viewer.navigateToPage(savedPage)
-    }
-
     const container = document.getElementById('page-container')
     container.addEventListener('viewer:pageChange', (e) => {
       updateRecentPage(pdfId, e.detail.page)
@@ -109,6 +104,11 @@ async function main() {
 
     controls.init()
     controls.updatePageIndicator()
+
+    const savedPage = await fetchSavedProgress(pdfId)
+    if (savedPage && savedPage > 1 && savedPage <= info.pageCount) {
+      viewer.navigateToPage(savedPage)
+    }
 
     const viewport = document.getElementById('viewport')
     let lastTrackedPage = savedPage || 1
