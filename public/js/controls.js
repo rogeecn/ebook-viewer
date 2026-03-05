@@ -4,7 +4,7 @@ const SWIPE_MIN_PX = 40
 const SWIPE_MAX_MS = 600
 const DEFAULT_MIN_SCALE = 0.5
 const FIT_MIN_SCALE = 0.1
-const BG_STORAGE_KEY = 'pdfViewer.bgColor'
+const BG_STORAGE_KEY = 'ebookViewer.bgColor'
 
 export class ViewerControls {
   constructor(viewer) {

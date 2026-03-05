@@ -7,12 +7,12 @@ function getScaleForQualityTier(tier) {
   return DEFAULT_SCALE * tier
 }
 
-export class PdfViewer {
+export class EbookViewer {
   constructor(containerId, viewportId) {
     this.container = document.getElementById(containerId)
     this.viewport = document.getElementById(viewportId)
-    this.pdfId = null
-    this.pdfInfo = null
+    this.ebookId = null
+    this.ebookInfo = null
     this.serverScale = DEFAULT_SCALE
     this.qualityTier = 1
     this.renderedPages = new Set()
@@ -23,17 +23,17 @@ export class PdfViewer {
     this.outlineOpen = false
   }
 
-  async load(pdfId) {
-    this.pdfId = pdfId
+  async load(ebookId) {
+    this.ebookId = ebookId
     this.renderedPages.clear()
     this.outlineItems = []
 
-    const res = await fetch(`/api/pdf/${pdfId}/info`)
-    if (!res.ok) throw new Error(`Failed to load PDF: ${res.statusText}`)
-    this.pdfInfo = await res.json()
+    const res = await fetch(`/api/ebook/${ebookId}/info`)
+    if (!res.ok) throw new Error(`Failed to load ebook: ${res.statusText}`)
+    this.ebookInfo = await res.json()
 
     this.container.innerHTML = ''
-    this.pdfInfo.pages.forEach((page, i) => {
+    this.ebookInfo.pages.forEach((page, i) => {
       const wrapper = this.createPageWrapper(page, i + 1)
       this.container.appendChild(wrapper)
     })
@@ -41,12 +41,12 @@ export class PdfViewer {
     this.setupIntersectionObserver()
     this.loadOutline()
 
-    return this.pdfInfo
+    return this.ebookInfo
   }
 
   async loadOutline() {
     try {
-      const res = await fetch(`/api/pdf/${this.pdfId}/outline`)
+      const res = await fetch(`/api/ebook/${this.ebookId}/outline`)
       if (!res.ok) return
       
       const data = await res.json()
@@ -159,7 +159,7 @@ export class PdfViewer {
     this.setupCanvas(canvas, displayWidth, displayHeight, qualityMultiplier)
 
     try {
-      const url = `/api/pdf/${this.pdfId}/page/${pageNum}?scale=${this.serverScale}`
+      const url = `/api/ebook/${this.ebookId}/page/${pageNum}?scale=${this.serverScale}`
       const img = new Image()
       img.src = url
 
@@ -174,7 +174,7 @@ export class PdfViewer {
 
       const textLayerDiv = wrapper.querySelector('.text-layer')
       if (textLayerDiv && !textLayerDiv.hasChildNodes()) {
-        fetch(`/api/pdf/${this.pdfId}/page/${pageNum}/text`)
+        fetch(`/api/ebook/${this.ebookId}/page/${pageNum}/text`)
           .then(res => {
             if (!res.ok) throw new Error(`Text fetch failed: ${res.statusText}`)
             return res.json()
@@ -295,7 +295,7 @@ export class PdfViewer {
   }
 
   get pageCount() {
-    return this.pdfInfo ? this.pdfInfo.pageCount : 0
+    return this.ebookInfo ? this.ebookInfo.pageCount : 0
   }
 
   destroy() {

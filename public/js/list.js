@@ -1,5 +1,5 @@
 const ROW_HEIGHT = 52
-const RECENTS_KEY = 'pdfLibrary.recents.v1'
+const RECENTS_KEY = 'ebookLibrary.recents.v1'
 const MAX_RECENTS = 10
 
 const folderStore = new Map()
@@ -18,7 +18,7 @@ const visibleRowsEl = document.getElementById('visible-rows')
 const loadingOverlay = document.getElementById('loading-overlay')
 const searchInput = document.getElementById('search-input')
 const searchClear = document.getElementById('search-clear')
-const pdfCount = document.getElementById('pdf-count')
+const ebookCount = document.getElementById('ebook-count')
 const recentSection = document.getElementById('recent-section')
 const recentList = document.getElementById('recent-list')
 
@@ -68,7 +68,7 @@ function highlightMatch(text, query) {
   return escapeHtml(before) + '<span class="search-highlight">' + escapeHtml(match) + '</span>' + escapeHtml(after)
 }
 
-const PINS_KEY = 'pdfLibrary.pins.v1'
+const PINS_KEY = 'ebookLibrary.pins.v1'
 const MAX_PINS = 3
 
 function getPins() {
@@ -87,23 +87,23 @@ function savePins(pins) {
   } catch {}
 }
 
-function isPinned(pdfId) {
-  return getPins().some(p => p.id === pdfId)
+function isPinned(ebookId) {
+  return getPins().some(p => p.id === ebookId)
 }
 
-function togglePin(pdfId) {
+function togglePin(ebookId) {
   let pins = getPins()
-  if (isPinned(pdfId)) {
-    pins = pins.filter(p => p.id !== pdfId)
+  if (isPinned(ebookId)) {
+    pins = pins.filter(p => p.id !== ebookId)
   } else {
     if (pins.length >= MAX_PINS) return
     const recents = getRecents()
-    const pdf = recents.find(r => r.id === pdfId)
-    if (pdf) {
+    const ebook = recents.find(r => r.id === ebookId)
+    if (ebook) {
       pins.unshift({
-        id: pdf.id,
-        name: pdf.name,
-        relPath: pdf.relPath,
+        id: ebook.id,
+        name: ebook.name,
+        relPath: ebook.relPath,
         pinnedAt: Date.now()
       })
     }
@@ -128,21 +128,21 @@ function saveRecents(recents) {
   } catch {}
 }
 
-function addRecent(pdf) {
+function addRecent(entry) {
   let recents = getRecents()
-  const existing = recents.find(r => r.id === pdf.id)
+  const existing = recents.find(r => r.id === entry.id)
   
   if (existing) {
     existing.lastOpenedAt = Date.now()
-    if (!isPinned(pdf.id)) {
-      recents = recents.filter(r => r.id !== pdf.id)
+    if (!isPinned(entry.id)) {
+      recents = recents.filter(r => r.id !== entry.id)
       recents.unshift(existing)
     }
   } else {
     recents.unshift({
-      id: pdf.id,
-      name: pdf.name,
-      relPath: pdf.relPath,
+      id: entry.id,
+      name: entry.name,
+      relPath: entry.relPath,
       lastOpenedAt: Date.now()
     })
   }
@@ -198,7 +198,7 @@ function renderRecents() {
     const progressText = progress?.page > 1 ? ` · p.${progress.page}` : ''
     
     return `
-    <a href="/view/${item.id}" class="recent-item ${isItemPinned ? 'pinned' : ''}" data-pdf-id="${item.id}">
+    <a href="/view/${item.id}" class="recent-item ${isItemPinned ? 'pinned' : ''}" data-ebook-id="${item.id}">
       <div class="recent-icon">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
       </div>
@@ -216,10 +216,10 @@ function renderRecents() {
     el.addEventListener('click', (e) => {
       if (e.target.closest('.recent-pin-btn')) return
       
-      const id = el.dataset.pdfId
+      const id = el.dataset.ebookId
       const recents = getRecents()
-      const pdf = recents.find(r => r.id === id) || getPins().find(p => p.id === id)
-      if (pdf) addRecent(pdf)
+      const entry = recents.find(r => r.id === id) || getPins().find(p => p.id === id)
+      if (entry) addRecent(entry)
     })
   })
   
@@ -251,12 +251,12 @@ async function fetchRoot() {
     const data = await res.json()
     folderStore.set('', data)
     rootLoaded = true
-    updatePdfCount()
+    updateEbookCount()
     computeVisibleRows()
     render()
   } catch (err) {
     console.error('Failed to load tree:', err)
-    visibleRowsEl.innerHTML = '<div class="empty-state"><h3>Error loading PDFs</h3><p>Please refresh the page</p></div>'
+    visibleRowsEl.innerHTML = '<div class="empty-state"><h3>Error loading ebooks</h3><p>Please refresh the page</p></div>'
   } finally {
     showLoading(false)
   }
@@ -293,7 +293,7 @@ async function performSearch(query) {
     searchResults = data.results || []
     computeVisibleRows()
     render()
-    updatePdfCount()
+    updateEbookCount()
   } catch (err) {
     console.error('Search failed:', err)
     searchResults = []
@@ -310,7 +310,7 @@ function exitSearch() {
   searchClear.style.display = 'none'
   computeVisibleRows()
   render()
-  updatePdfCount()
+  updateEbookCount()
 }
 
 function toggleFolder(folderPath) {
@@ -347,10 +347,10 @@ function computeVisibleRows() {
   visibleRows = []
   
   if (isSearchMode) {
-    searchResults.forEach(pdf => {
+    searchResults.forEach(ebook => {
       visibleRows.push({
-        type: 'pdf',
-        data: pdf,
+        type: 'ebook',
+        data: ebook,
         depth: 0,
         isSearchResult: true
       })
@@ -375,10 +375,10 @@ function computeVisibleRows() {
       }
     })
     
-    folder.children.pdfs.forEach(pdf => {
+    folder.children.ebooks.forEach(ebook => {
       visibleRows.push({
-        type: 'pdf',
-        data: pdf,
+        type: 'ebook',
+        data: ebook,
         depth
       })
     })
@@ -425,32 +425,32 @@ function render() {
           </span>
           <div class="row-content">
             <div class="row-name">${escapeHtml(row.data.name)}</div>
-            <div class="row-counts">${row.data.counts?.totalPdfs || 0} docs</div>
+            <div class="row-counts">${row.data.counts?.totalEbooks || 0} docs</div>
           </div>
         </div>
       `
     } else {
-      const pdf = row.data
+      const ebook = row.data
       const nameClass = row.isSearchResult ? 'row-name search-match' : 'row-name'
-      const displayName = row.isSearchResult ? highlightMatch(pdf.name, searchQuery) : escapeHtml(pdf.name)
+      const displayName = row.isSearchResult ? highlightMatch(ebook.name, searchQuery) : escapeHtml(ebook.name)
       
       html += `
-        <a class="tree-row pdf-row" 
+        <a class="tree-row ebook-row" 
            style="position: absolute; top: ${top}px; width: 100%;" 
-           href="/view/${pdf.id}" 
-           data-pdf-id="${pdf.id}"
-           data-pdf-name="${escapeHtml(pdf.name)}"
-           data-pdf-rel-path="${escapeHtml(pdf.relPath || '')}">
+           href="/view/${ebook.id}" 
+           data-ebook-id="${ebook.id}"
+           data-ebook-name="${escapeHtml(ebook.name)}"
+           data-ebook-rel-path="${escapeHtml(ebook.relPath || '')}">
           <div class="row-indent" style="width: ${row.depth * 20}px;">
             ${Array(row.depth).fill('<span class="indent-unit"></span>').join('')}
           </div>
           <span class="folder-toggle empty"></span>
-          <span class="row-icon pdf-icon">
+          <span class="row-icon ebook-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
           </span>
           <div class="row-content">
             <div class="${nameClass}">${displayName}</div>
-            <div class="row-meta">${pdf.pageCount || 0} pages · ${formatSize(pdf.size || 0)}</div>
+            <div class="row-meta">${ebook.pageCount || 0} pages · ${formatSize(ebook.size || 0)}</div>
           </div>
         </a>
       `
@@ -466,11 +466,11 @@ function render() {
     })
   })
   
-  visibleRowsEl.querySelectorAll('.pdf-row').forEach(el => {
+  visibleRowsEl.querySelectorAll('.ebook-row').forEach(el => {
     el.addEventListener('click', () => {
-      const id = el.dataset.pdfId
-      const name = el.dataset.pdfName
-      const relPath = el.dataset.pdfRelPath
+      const id = el.dataset.ebookId
+      const name = el.dataset.ebookName
+      const relPath = el.dataset.ebookRelPath
       addRecent({ id, name, relPath })
     })
   })
@@ -480,13 +480,13 @@ function showLoading(show) {
   loadingOverlay.classList.toggle('hidden', !show)
 }
 
-function updatePdfCount() {
+function updateEbookCount() {
   if (isSearchMode) {
-    pdfCount.textContent = `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`
+    ebookCount.textContent = `${searchResults.length} result${searchResults.length !== 1 ? 's' : ''}`
   } else {
     const root = folderStore.get('')
-    const total = root?.counts?.totalPdfs || 0
-    pdfCount.textContent = `${total} document${total !== 1 ? 's' : ''}`
+    const total = root?.counts?.totalEbooks || 0
+    ebookCount.textContent = `${total} document${total !== 1 ? 's' : ''}`
   }
 }
 
