@@ -114,7 +114,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-#pdf-count {
+#ebook-count {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
@@ -424,7 +424,7 @@ body {
   opacity: 0.8;
 }
 
-.pdf-icon {
+.ebook-icon {
   color: var(--accent);
   opacity: 0.9;
 }
@@ -486,11 +486,11 @@ body {
   flex-shrink: 0;
 }
 
-.tree-row.pdf-row .row-name {
+.tree-row.ebook-row .row-name {
   color: var(--text-primary);
 }
 
-.tree-row.pdf-row:hover .row-name {
+.tree-row.ebook-row:hover .row-name {
   color: #fff;
 }
 
