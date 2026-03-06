@@ -21,6 +21,7 @@ export class EbookViewer {
     this.currentPage = 1
     this.outlineItems = []
     this.outlineOpen = false
+    this.format = 'image' // 'image' or 'text'
   }
 
   async load(ebookId) {
@@ -31,6 +32,7 @@ export class EbookViewer {
     const res = await fetch(`/api/ebook/${ebookId}/info`)
     if (!res.ok) throw new Error(`Failed to load ebook: ${res.statusText}`)
     this.ebookInfo = await res.json()
+    this.format = this.ebookInfo.format || 'image'
 
     this.container.innerHTML = ''
     this.ebookInfo.pages.forEach((page, i) => {
@@ -93,22 +95,32 @@ export class EbookViewer {
     wrapper.className = 'page-wrapper loading'
     wrapper.dataset.page = pageNum
 
-    const aspectRatio = pageInfo.height / pageInfo.width
-    const displayWidth = DISPLAY_WIDTH
-    const displayHeight = Math.round(displayWidth * aspectRatio)
+    if (this.format === 'text') {
+      wrapper.style.width = `${DISPLAY_WIDTH}px`
+      wrapper.classList.add('text-format')
 
-    wrapper.style.width = `${displayWidth}px`
-    wrapper.style.height = `${displayHeight}px`
+      const contentDiv = document.createElement('div')
+      contentDiv.className = 'page-content'
+      wrapper.appendChild(contentDiv)
+    } else {
+      const aspectRatio = pageInfo.height / pageInfo.width
+      const displayWidth = DISPLAY_WIDTH
+      const displayHeight = Math.round(displayWidth * aspectRatio)
 
-    const canvas = document.createElement('canvas')
-    canvas.className = 'page-canvas'
-    this.setupCanvas(canvas, displayWidth, displayHeight)
+      wrapper.style.width = `${displayWidth}px`
+      wrapper.style.height = `${displayHeight}px`
 
-    const textLayerDiv = document.createElement('div')
-    textLayerDiv.className = 'text-layer panzoom-exclude'
+      const canvas = document.createElement('canvas')
+      canvas.className = 'page-canvas'
+      this.setupCanvas(canvas, displayWidth, displayHeight)
 
-    wrapper.appendChild(canvas)
-    wrapper.appendChild(textLayerDiv)
+      const textLayerDiv = document.createElement('div')
+      textLayerDiv.className = 'text-layer panzoom-exclude'
+
+      wrapper.appendChild(canvas)
+      wrapper.appendChild(textLayerDiv)
+    }
+
     return wrapper
   }
 
@@ -150,6 +162,24 @@ export class EbookViewer {
 
   async renderPage(wrapper, pageNum, qualityMultiplier = 1) {
     this.renderedPages.add(pageNum)
+
+    if (this.format === 'text') {
+      try {
+        const res = await fetch(`/api/ebook/${this.ebookId}/content/${pageNum}`)
+        if (!res.ok) throw new Error(`Content fetch failed: ${res.statusText}`)
+        const data = await res.json()
+
+        const contentDiv = wrapper.querySelector('.page-content')
+        if (contentDiv) {
+          contentDiv.innerHTML = data.html
+        }
+        wrapper.classList.remove('loading')
+      } catch (err) {
+        console.error(`Failed to render text page ${pageNum}:`, err)
+      }
+      return
+    }
+
     const canvas = wrapper.querySelector('canvas')
     const ctx = canvas.getContext('2d')
 
@@ -193,6 +223,8 @@ export class EbookViewer {
   }
 
   reRenderAll(qualityTier) {
+    if (this.format === 'text') return
+
     this.qualityTier = qualityTier
     this.serverScale = getScaleForQualityTier(qualityTier)
     this.renderedPages.clear()
