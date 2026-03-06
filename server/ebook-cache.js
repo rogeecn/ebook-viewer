@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-const CACHE_VERSION = 5
+const CACHE_VERSION = 6
 const CACHE_FILENAME = 'ebook-cache.json'
 
 export function getCachePath() {
@@ -60,6 +60,7 @@ export function buildCacheData(byId, folderIndex, ebookDir) {
     name: entry.name,
     relPath: entry.relPath,
     dirPath: entry.dirPath,
+    filePath: entry.filePath,
     pageCount: entry.pageCount,
     size: entry.size,
     mtimeMs: entry.mtimeMs

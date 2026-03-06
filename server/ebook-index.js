@@ -159,11 +159,60 @@ export function scanDirectoryRecursive() {
     return
   }
   
-  const seenRelPaths = new Set()
   let added = 0
   let updated = 0
   let skipped = 0
+  let removed = 0
   
+  // Phase 1: Verify cached entries — stat each known file, keep/update/remove
+  for (const [relPath, entry] of Array.from(byRelPath.entries())) {
+    const absPath = entry.filePath
+    
+    try {
+      const stats = fs.statSync(absPath)
+      
+      if (entry.mtimeMs === stats.mtimeMs && entry.size === stats.size) {
+        // File unchanged — skip entirely
+        skipped++
+        continue
+      }
+      
+      // File changed — re-extract metadata
+      const metadata = extractMetadata(absPath)
+      const id = hashRelPath(relPath)
+      
+      const updatedEntry = {
+        id,
+        name: entry.name,
+        relPath,
+        dirPath: entry.dirPath,
+        pageCount: metadata.pageCount,
+        size: metadata.size,
+        mtimeMs: metadata.mtimeMs,
+        filePath: absPath
+      }
+      
+      if (entry.id !== id) {
+        byId.delete(entry.id)
+      }
+      
+      byId.set(id, updatedEntry)
+      byRelPath.set(relPath, updatedEntry)
+      updated++
+      
+    } catch (err) {
+      // File no longer exists or unreadable — remove
+      if (err.code === 'ENOENT') {
+        byId.delete(entry.id)
+        byRelPath.delete(relPath)
+        removed++
+      } else {
+        console.error(`Failed to stat ${relPath}:`, err.message)
+      }
+    }
+  }
+  
+  // Phase 2: Walk directory tree to discover NEW files only
   const stack = [{ absDir: EBOOK_DIR, relDir: '' }]
   
   while (stack.length > 0) {
@@ -186,17 +235,14 @@ export function scanDirectoryRecursive() {
         stack.push({ absDir: absPath, relDir: relPath })
       } else if (entry.isFile() && isSupportedFile(name)) {
         const normalizedRelPath = normalizeRelPath(relPath)
-        seenRelPaths.add(normalizedRelPath)
         
+        // Already known — handled in Phase 1
+        if (byRelPath.has(normalizedRelPath)) {
+          continue
+        }
+        
+        // New file — extract metadata
         try {
-          const stats = fs.statSync(absPath)
-          const existing = byRelPath.get(normalizedRelPath)
-          
-          if (existing && existing.mtimeMs === stats.mtimeMs && existing.size === stats.size) {
-            skipped++
-            continue
-          }
-          
           const metadata = extractMetadata(absPath)
           const id = hashRelPath(normalizedRelPath)
           
@@ -211,18 +257,9 @@ export function scanDirectoryRecursive() {
             filePath: absPath
           }
           
-          if (existing && existing.id !== id) {
-            byId.delete(existing.id)
-          }
-          
           byId.set(id, ebookEntry)
           byRelPath.set(normalizedRelPath, ebookEntry)
-          
-          if (existing) {
-            updated++
-          } else {
-            added++
-          }
+          added++
           
         } catch (err) {
           console.error(`Failed to process ${name}:`, err.message)
@@ -231,15 +268,7 @@ export function scanDirectoryRecursive() {
     }
   }
   
-  let removed = 0
-  for (const [relPath, entry] of byRelPath) {
-    if (!seenRelPaths.has(relPath)) {
-      byId.delete(entry.id)
-      byRelPath.delete(relPath)
-      removed++
-    }
-  }
-  
+  // Phase 3: Rebuild folder index
   folderIndex.clear()
   ensureFolderExists('')
   updateFolderRelationships()
@@ -410,7 +439,7 @@ export function startPeriodicScan() {
     for (const ebook of cached.ebooks) {
       const entry = {
         ...ebook,
-        filePath: path.join(EBOOK_DIR, ebook.relPath)
+        filePath: ebook.filePath || path.join(EBOOK_DIR, ebook.relPath)
       }
       byId.set(entry.id, entry)
       byRelPath.set(entry.relPath, entry)

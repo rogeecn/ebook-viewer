@@ -2,9 +2,9 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 
 const PROGRESS_FILENAME = 'reading-progress.json'
-const STORE_VERSION = 1
+const STORE_VERSION = 2
 
-/** @type {Map<string, { page: number, updatedAt: number }>} */
+/** @type {Map<string, { page: number, updatedAt: number, relPath: string, filePath: string }>} */
 const progressMap = new Map()
 
 let progressFilePath = null
@@ -56,8 +56,8 @@ export function getProgress(ebookId) {
   return progressMap.get(ebookId) || null
 }
 
-export function setProgress(ebookId, page) {
-  progressMap.set(ebookId, { page, updatedAt: Date.now() })
+export function setProgress(ebookId, page, relPath, filePath) {
+  progressMap.set(ebookId, { page, updatedAt: Date.now(), relPath, filePath })
   saveProgress()
 }
 

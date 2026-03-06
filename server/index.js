@@ -183,7 +183,11 @@ app.put('/api/progress/:id', (req, res) => {
     return res.status(400).json({ error: 'Invalid page number' })
   }
 
-  setProgress(id, page)
+  const ebook = getEbookById(id)
+  const relPath = ebook?.relPath || ''
+  const filePath = ebook?.filePath || ''
+
+  setProgress(id, page, relPath, filePath)
   res.json({ ok: true })
 })
 
