@@ -1,7 +1,7 @@
 import express from 'express'
 import path from 'node:path'
-import { getEbookInfo, renderPage, getEbookOutline, getPageText } from './ebook-renderer.js'
-import { getAllEbooks, startPeriodicScan, getFolderNode, listSearchResults, getEbooksByIds, getEbookById } from './ebook-index.js'
+import { getEbookInfo, renderPage, getEbookOutline, getPageText, getTextContent } from './ebook-renderer.js'
+import { getAllEbooks, startPeriodicScan, getFolderNode, listSearchResults, getEbooksByIds, getEbookById, triggerRescan } from './ebook-index.js'
 import { loadProgress, getProgress, setProgress, getAllProgress } from './progress-store.js'
 
 const app = express()
@@ -56,6 +56,14 @@ app.get('/api/search', (req, res) => {
   res.json({ query: q, results })
 })
 
+app.post('/api/rescan', async (req, res) => {
+  const result = triggerRescan()
+  if (!result.ok) {
+    return res.status(429).json({ error: result.error, retryAfter: result.retryAfter })
+  }
+  res.json({ ok: true, message: result.message })
+})
+
 app.get('/api/ebook/:id/info', (req, res) => {
   const { id } = req.params
   const info = getEbookInfo(id)
@@ -106,6 +114,28 @@ app.get('/api/ebook/:id/page/:pageNum/text', (req, res) => {
 
   res.set({ 'Cache-Control': 'public, max-age=3600' })
   res.json(textData)
+})
+
+app.get('/api/ebook/:id/content/:pageNum', (req, res) => {
+  const { id, pageNum } = req.params
+  const page = parseInt(pageNum, 10)
+
+  if (isNaN(page) || page < 1) {
+    return res.status(400).json({ error: 'Invalid page number' })
+  }
+
+  const content = getTextContent(id)
+  if (!content) {
+    return res.status(404).json({ error: `Content not found for ebook "${id}"` })
+  }
+
+  const pageIndex = page - 1
+  if (pageIndex >= content.pages.length) {
+    return res.status(404).json({ error: `Page ${page} not found` })
+  }
+
+  res.set({ 'Cache-Control': 'public, max-age=3600' })
+  res.json({ html: content.pages[pageIndex], page, totalPages: content.pages.length })
 })
 
 app.get('/api/ebook/:id/outline', (req, res) => {

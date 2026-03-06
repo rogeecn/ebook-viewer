@@ -3,10 +3,29 @@ import * as path from 'node:path'
 import * as mupdf from 'mupdf'
 import { LRUCache } from './cache.js'
 import { getEbookById } from './ebook-index.js'
-import { preprocessBuffer, isReflowable } from './html-sanitizer.js'
+import { preprocessBuffer, isReflowable, isDirectRenderFormat, bufferToHtmlPages } from './html-sanitizer.js'
 
 const imageCache = new LRUCache(100)
 const docCache = new Map()
+const textContentCache = new Map()
+
+export function getTextContent(ebookId) {
+  if (textContentCache.has(ebookId)) {
+    return textContentCache.get(ebookId)
+  }
+
+  const entry = getEbookById(ebookId)
+  if (!entry) return null
+
+  const ext = path.extname(entry.filePath).toLowerCase()
+  if (!isDirectRenderFormat(ext)) return null
+
+  const rawBuffer = fs.readFileSync(entry.filePath)
+  const result = bufferToHtmlPages(rawBuffer, ext)
+
+  textContentCache.set(ebookId, result)
+  return result
+}
 
 function getDocument(ebookId) {
   if (docCache.has(ebookId)) {
@@ -18,8 +37,10 @@ function getDocument(ebookId) {
     return null
   }
 
-  const rawBuffer = fs.readFileSync(entry.filePath)
   const ext = path.extname(entry.filePath).toLowerCase()
+  if (isDirectRenderFormat(ext)) return null
+
+  const rawBuffer = fs.readFileSync(entry.filePath)
   const { buffer, magic } = preprocessBuffer(rawBuffer, ext)
   const doc = mupdf.Document.openDocument(buffer, magic)
 
@@ -32,6 +53,24 @@ function getDocument(ebookId) {
 }
 
 export function getEbookInfo(ebookId) {
+  const entry = getEbookById(ebookId)
+  if (!entry) return null
+
+  const ext = path.extname(entry.filePath).toLowerCase()
+
+  if (isDirectRenderFormat(ext)) {
+    const content = getTextContent(ebookId)
+    if (!content) return null
+
+    return {
+      id: ebookId,
+      filename: entry.name,
+      pageCount: content.pages.length,
+      pages: content.pages.map((_, i) => ({ index: i, width: 800, height: 1000 })),
+      format: 'text',
+    }
+  }
+
   const doc = getDocument(ebookId)
   if (!doc) return null
 
@@ -48,12 +87,12 @@ export function getEbookInfo(ebookId) {
     })
   }
 
-  const entry = getEbookById(ebookId)
   return {
     id: ebookId,
-    filename: entry?.name,
+    filename: entry.name,
     pageCount,
     pages,
+    format: 'image',
   }
 }
 

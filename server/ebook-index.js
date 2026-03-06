@@ -4,7 +4,7 @@ import * as crypto from 'node:crypto'
 import * as mupdf from 'mupdf'
 import { loadCache, saveCacheAtomically, buildCacheData, getCachePath } from './ebook-cache.js'
 import { isSupportedFile } from './formats.js'
-import { preprocessBuffer, isReflowable } from './html-sanitizer.js'
+import { preprocessBuffer, isReflowable, isDirectRenderFormat, bufferToHtmlPages } from './html-sanitizer.js'
 
 const EBOOK_DIR = process.env.EBOOK_DIR || path.resolve('ebooks')
 const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '1800000', 10)
@@ -56,8 +56,15 @@ function hashRelPath(relPath) {
 }
 
 function extractMetadata(filePath) {
-  const rawBuffer = fs.readFileSync(filePath)
   const ext = path.extname(filePath).toLowerCase()
+  const rawBuffer = fs.readFileSync(filePath)
+  const stats = fs.statSync(filePath)
+
+  if (isDirectRenderFormat(ext)) {
+    const result = bufferToHtmlPages(rawBuffer, ext)
+    return { pageCount: result.pages.length, size: stats.size, mtimeMs: stats.mtimeMs }
+  }
+
   const { buffer, magic } = preprocessBuffer(rawBuffer, ext)
   const doc = mupdf.Document.openDocument(buffer, magic)
   try {
@@ -65,7 +72,6 @@ function extractMetadata(filePath) {
       doc.layout(595, 842, 12)
     }
     const pageCount = doc.countPages()
-    const stats = fs.statSync(filePath)
     return { pageCount, size: stats.size, mtimeMs: stats.mtimeMs }
   } finally {
     doc.destroy()
@@ -442,6 +448,35 @@ export function startPeriodicScan() {
   }, SCAN_INTERVAL)
   
   console.log(`Periodic scanning enabled: every ${SCAN_INTERVAL / 1000 / 60} minutes`)
+}
+
+let lastRescanTime = 0
+const RESCAN_COOLDOWN = 10000
+
+/**
+ * Trigger a manual rescan with 10s cooldown
+ * @returns {{ ok: boolean, error?: string, retryAfter?: number, message?: string }}
+ */
+export function triggerRescan() {
+  const now = Date.now()
+  const elapsed = now - lastRescanTime
+
+  if (elapsed < RESCAN_COOLDOWN) {
+    const retryAfter = Math.ceil((RESCAN_COOLDOWN - elapsed) / 1000)
+    return { ok: false, error: 'Rescan cooldown active', retryAfter }
+  }
+
+  lastRescanTime = now
+
+  try {
+    scanDirectoryRecursive()
+    const cacheData = buildCacheData(byId, folderIndex, EBOOK_DIR)
+    saveCacheAtomically(getCachePath(), cacheData)
+    return { ok: true, message: `Scan complete: ${byId.size} documents indexed` }
+  } catch (err) {
+    console.error('Manual rescan failed:', err)
+    return { ok: false, error: 'Rescan failed: ' + err.message }
+  }
 }
 
 ensureFolderExists('')
