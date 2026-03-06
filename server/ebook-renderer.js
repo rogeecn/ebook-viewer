@@ -1,8 +1,9 @@
 import * as fs from 'node:fs'
+import * as path from 'node:path'
 import * as mupdf from 'mupdf'
 import { LRUCache } from './cache.js'
 import { getEbookById } from './ebook-index.js'
-import { getMimeType } from './formats.js'
+import { preprocessBuffer, isReflowable } from './html-sanitizer.js'
 
 const imageCache = new LRUCache(100)
 const docCache = new Map()
@@ -17,9 +18,15 @@ function getDocument(ebookId) {
     return null
   }
 
-  const buffer = fs.readFileSync(entry.filePath)
-  const magic = getMimeType(entry.filePath)
+  const rawBuffer = fs.readFileSync(entry.filePath)
+  const ext = path.extname(entry.filePath).toLowerCase()
+  const { buffer, magic } = preprocessBuffer(rawBuffer, ext)
   const doc = mupdf.Document.openDocument(buffer, magic)
+
+  if (isReflowable(ext) && typeof doc.layout === 'function') {
+    doc.layout(595, 842, 12)
+  }
+
   docCache.set(ebookId, doc)
   return doc
 }

@@ -3,7 +3,8 @@ import * as path from 'node:path'
 import * as crypto from 'node:crypto'
 import * as mupdf from 'mupdf'
 import { loadCache, saveCacheAtomically, buildCacheData, getCachePath } from './ebook-cache.js'
-import { isSupportedFile, getMimeType } from './formats.js'
+import { isSupportedFile } from './formats.js'
+import { preprocessBuffer, isReflowable } from './html-sanitizer.js'
 
 const EBOOK_DIR = process.env.EBOOK_DIR || path.resolve('ebooks')
 const SCAN_INTERVAL = parseInt(process.env.SCAN_INTERVAL || '1800000', 10)
@@ -55,10 +56,14 @@ function hashRelPath(relPath) {
 }
 
 function extractMetadata(filePath) {
-  const buffer = fs.readFileSync(filePath)
-  const magic = getMimeType(filePath)
+  const rawBuffer = fs.readFileSync(filePath)
+  const ext = path.extname(filePath).toLowerCase()
+  const { buffer, magic } = preprocessBuffer(rawBuffer, ext)
   const doc = mupdf.Document.openDocument(buffer, magic)
   try {
+    if (isReflowable(ext) && typeof doc.layout === 'function') {
+      doc.layout(595, 842, 12)
+    }
     const pageCount = doc.countPages()
     const stats = fs.statSync(filePath)
     return { pageCount, size: stats.size, mtimeMs: stats.mtimeMs }

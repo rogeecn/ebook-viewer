@@ -10,14 +10,18 @@ Express 5 API serving ebook metadata, rendered page images (PNG), and reading pr
 index.js (routes + app bootstrap)
 ├── ebook-renderer.js (MuPDF rendering)
 │   ├── cache.js (LRU)
-│   └── ebook-index.js (lookup by ID)
+│   ├── ebook-index.js (lookup by ID)
+│   └── html-sanitizer.js (HTML sanitization, MD→HTML conversion, reflowable layout)
 ├── ebook-index.js (directory scanner + search)
-│   └── ebook-cache.js (persistent scan cache)
+│   ├── ebook-cache.js (persistent scan cache)
+│   └── html-sanitizer.js (preprocessing for new formats)
 └── progress-store.js (reading progress persistence)
 ```
 
 ## KEY PATTERNS
 
+- **Preprocessing pipeline**: HTML/MD/XHTML files go through `html-sanitizer.js` before MuPDF: strips `<script>`, `<iframe>`, `on*` handlers, `javascript:` URLs. MD files are converted to HTML via `markdown-it` first.
+- **Reflowable layout**: Formats like EPUB, MOBI, FB2, HTML, XHTML, MD call `doc.layout(595, 842, 12)` after `openDocument()` — A4 at 12pt font size. `doc.isReflowable()` is unreliable in WASM build, so `isReflowable()` in html-sanitizer.js provides the check.
 - **Two-tier caching in ebook-renderer.js**: `docCache` (Map, unbounded, holds open MuPDF Document objects) + `imageCache` (LRU, 100 entries, holds PNG Buffers). Scale is clamped [0.5, 4.0].
 - **ebook-index.js data model**: Three Maps — `byId` (MD5→EbookEntry), `byRelPath` (relPath→EbookEntry), `folderIndex` (path→FolderSummary). Rebuilt fully on each scan.
 - **Scan lifecycle**: `startPeriodicScan()` loads cache → if hit, hydrates Maps and defers background rescan 100ms → setInterval for periodic rescans.
@@ -38,4 +42,4 @@ Express 5 specifics:
 - `doc.destroy()` is called in `extractMetadata` (ebook-index.js) but NOT in ebook-renderer.js — documents in `docCache` are intentionally kept open for reuse
 - `scanDirectoryRecursive()` uses iterative stack (not recursion) despite the name
 - `mupdf.Document.openDocument(buffer, 'application/pdf')` requires the full file buffer in memory
-- Cache version constants (`CACHE_VERSION=4`, `STORE_VERSION=1`) must be bumped when changing JSON schema
+- Cache version constants (`CACHE_VERSION=5`, `STORE_VERSION=1`) must be bumped when changing JSON schema

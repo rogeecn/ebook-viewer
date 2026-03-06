@@ -7,6 +7,7 @@ Ebooks are rendered to images on the server, so the browser only needs to displa
 ## Features
 
 - **Server-side rendering** — MuPDF renders pages to PNG on the server with LRU caching
+- **Wide format support** — PDF, EPUB, MOBI, CBZ, CBT, XPS, FB2, HTML, XHTML, Markdown
 - **Ebook library** — Auto-scans a directory, builds a browsable folder tree with search
 - **Reading progress** — Remembers your last page per document
 - **Viewer controls** — Zoom, pan (via panzoom), vertical/horizontal page flip, outline/TOC navigation
@@ -63,18 +64,21 @@ docker run -d -p 3000:3000 -v /path/to/your/ebooks:/app/ebooks ebook-viewer
 - **Runtime** — Node.js (ESM)
 - **Server** — Express 5
 - **Ebook engine** — [MuPDF](https://mupdf.com/) (via `mupdf` npm package)
+- **HTML sanitization** — [sanitize-html](https://github.com/apostrophecms/sanitize-html) (strips scripts, iframes, event handlers)
+- **Markdown** — [markdown-it](https://github.com/markdown-it/markdown-it) (CommonMark compliant)
 - **Zoom/Pan** — [@panzoom/panzoom](https://github.com/timmywil/panzoom)
 
 ## Project Structure
 
 ```
 server/
-  index.js           # Express app and API routes
+  index.js             # Express app and API routes
   ebook-renderer.js    # MuPDF rendering with document and image caching
   ebook-index.js       # Ebook directory scanner with MD5 dedup and search
   ebook-cache.js       # Persistent scan cache
-  cache.js           # LRU cache implementation
-  progress-store.js  # Reading progress persistence
+  html-sanitizer.js    # HTML sanitization and Markdown conversion for safe rendering
+  cache.js             # LRU cache implementation
+  progress-store.js    # Reading progress persistence
 public/
   index.html         # Library page
   view.html          # Viewer page

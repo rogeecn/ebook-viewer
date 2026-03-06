@@ -12,7 +12,7 @@ Self-hosted ebook library + viewer. Server renders pages to PNG via MuPDF; brows
 
 ```
 .
-├── server/              # Express 5 API + MuPDF rendering (6 modules)
+├── server/              # Express 5 API + MuPDF rendering (7 modules)
 ├── public/              # SPA frontend (2 HTML pages, vanilla JS, no framework)
 │   ├── js/              # viewer.js, controls.js, viewer-app.js, list.js
 │   │   └── vendor/      # panzoom.es.js (bundled, do not edit)
@@ -28,6 +28,7 @@ Self-hosted ebook library + viewer. Server renders pages to PNG via MuPDF; brows
 |------|----------|-------|
 | Add API endpoint | `server/index.js` | All routes in one file, Express 5 syntax (`{*path}` not `*`) |
 | Change ebook rendering | `server/ebook-renderer.js` | MuPDF Document/Pixmap, two caches (doc + image LRU) |
+| HTML/MD preprocessing | `server/html-sanitizer.js` | Sanitizes HTML, converts MD→HTML, preprocesses buffers for MuPDF |
 | Modify ebook scanning/indexing | `server/ebook-index.js` | Largest server file (440 lines), recursive scanner + folder tree |
 | Change viewer behavior | `public/js/viewer.js` | EbookViewer class, IntersectionObserver lazy loading |
 | Change viewer controls | `public/js/controls.js` | ViewerControls class, Panzoom integration, zoom/autoscroll/outline |

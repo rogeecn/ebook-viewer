@@ -1,5 +1,8 @@
 /** @type {Set<string>} */
-const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.epub', '.xps', '.oxps', '.cbz', '.fb2'])
+const SUPPORTED_EXTENSIONS = new Set([
+  '.pdf', '.epub', '.xps', '.oxps', '.cbz', '.fb2',
+  '.mobi', '.cbt', '.html', '.xhtml', '.md'
+])
 
 export { SUPPORTED_EXTENSIONS }
 
