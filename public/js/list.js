@@ -21,6 +21,10 @@ const searchClear = document.getElementById('search-clear')
 const ebookCount = document.getElementById('ebook-count')
 const recentSection = document.getElementById('recent-section')
 const recentList = document.getElementById('recent-list')
+const refreshBtn = document.getElementById('refresh-btn')
+
+let refreshCooldownTimer = null
+const REFRESH_COOLDOWN = 10000
 
 function debounce(fn, ms) {
   let timer
@@ -343,6 +347,38 @@ async function expandFolder(folderPath) {
   render()
 }
 
+function getFileExtension(name) {
+  const dot = name.lastIndexOf('.')
+  return dot >= 0 ? name.slice(dot).toLowerCase() : ''
+}
+
+function getFileTypeIcon(name) {
+  const ext = getFileExtension(name)
+  switch (ext) {
+    case '.pdf':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M10 12h1.5a1.5 1.5 0 1 1 0 3H10v3"/><path d="M16 12v6"/></svg>', cls: 'icon-pdf' }
+    case '.epub':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>', cls: 'icon-epub' }
+    case '.mobi':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="12" y1="7" x2="12" y2="13"/></svg>', cls: 'icon-mobi' }
+    case '.cbz':
+    case '.cbt':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>', cls: 'icon-comic' }
+    case '.fb2':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>', cls: 'icon-fb2' }
+    case '.xps':
+    case '.oxps':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', cls: 'icon-xps' }
+    case '.html':
+    case '.xhtml':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>', cls: 'icon-html' }
+    case '.md':
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>', cls: 'icon-md' }
+    default:
+      return { icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>', cls: 'icon-default' }
+  }
+}
+
 function computeVisibleRows() {
   visibleRows = []
   
@@ -433,6 +469,7 @@ function render() {
       const ebook = row.data
       const nameClass = row.isSearchResult ? 'row-name search-match' : 'row-name'
       const displayName = row.isSearchResult ? highlightMatch(ebook.name, searchQuery) : escapeHtml(ebook.name)
+      const fileType = getFileTypeIcon(ebook.name)
       
       html += `
         <a class="tree-row ebook-row" 
@@ -445,8 +482,8 @@ function render() {
             ${Array(row.depth).fill('<span class="indent-unit"></span>').join('')}
           </div>
           <span class="folder-toggle empty"></span>
-          <span class="row-icon ebook-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <span class="row-icon ebook-icon ${fileType.cls}">
+            ${fileType.icon}
           </span>
           <div class="row-content">
             <div class="${nameClass}">${displayName}</div>
@@ -500,6 +537,41 @@ function handleSearchInput(e) {
   debounce(performSearch, 200)(query)
 }
 
+async function handleRefresh() {
+  if (refreshBtn.disabled) return
+
+  refreshBtn.disabled = true
+  refreshBtn.classList.add('refreshing')
+
+  try {
+    const res = await fetch('/api/rescan', { method: 'POST' })
+    const data = await res.json()
+
+    if (res.status === 429) {
+      startRefreshCooldown(data.retryAfter * 1000)
+      return
+    }
+
+    folderStore.clear()
+    expandedFolders.clear()
+    rootLoaded = false
+    await fetchRoot()
+  } catch (err) {
+    console.error('Refresh failed:', err)
+  } finally {
+    refreshBtn.classList.remove('refreshing')
+    startRefreshCooldown(REFRESH_COOLDOWN)
+  }
+}
+
+function startRefreshCooldown(ms) {
+  refreshBtn.disabled = true
+  clearTimeout(refreshCooldownTimer)
+  refreshCooldownTimer = setTimeout(() => {
+    refreshBtn.disabled = false
+  }, ms)
+}
+
 async function init() {
   viewport.addEventListener('scroll', handleScroll, { passive: true })
   searchInput.addEventListener('input', handleSearchInput)
@@ -509,6 +581,7 @@ async function init() {
     exitSearch()
   })
   document.getElementById('clear-recents').addEventListener('click', clearRecents)
+  refreshBtn.addEventListener('click', handleRefresh)
   
   await fetchAllProgress()
   renderRecents()
